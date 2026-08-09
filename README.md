@@ -1,6 +1,6 @@
 # pv
 
-PDFをプレゼン用に表示するシンプルなビューアです。詳しい仕様は [requirement.md](requirement.md) を参照してください。
+PDFをプレゼン用に表示するシンプルなビューアです。詳しい仕様は [docs/requirement.md](docs/requirement.md) を参照してください。
 
 ## インストール・ビルド
 
