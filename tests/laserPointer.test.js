@@ -112,4 +112,36 @@ describe("laserPointer", () => {
       2 * laserPointer.calculateRadius(800, 600)
     );
   });
+
+  it("draws a connected line through drag points instead of a dot per point", () => {
+    const ctx = document.getElementById("overlay-canvas").getContext("2d");
+    const moveToSpy = vi.spyOn(ctx, "moveTo");
+    const lineToSpy = vi.spyOn(ctx, "lineTo");
+    const arcSpy = vi.spyOn(ctx, "arc");
+    const strokeSpy = vi.spyOn(ctx, "stroke");
+
+    laserPointer.startStroke(10, 20);
+    laserPointer.addPoint(30, 40);
+    laserPointer.addPoint(50, 60);
+    laserPointer.render();
+
+    expect(arcSpy).not.toHaveBeenCalled();
+    expect(moveToSpy).toHaveBeenCalledWith(10, 20);
+    expect(lineToSpy).toHaveBeenCalledWith(30, 40);
+    expect(lineToSpy).toHaveBeenCalledWith(50, 60);
+    expect(strokeSpy).toHaveBeenCalled();
+  });
+
+  it("draws a plain click as a zero-length line segment (renders as a round dot)", () => {
+    const ctx = document.getElementById("overlay-canvas").getContext("2d");
+    const moveToSpy = vi.spyOn(ctx, "moveTo");
+    const lineToSpy = vi.spyOn(ctx, "lineTo");
+
+    laserPointer.startStroke(15, 25);
+    laserPointer.render();
+
+    expect(moveToSpy).toHaveBeenCalledWith(15, 25);
+    expect(lineToSpy).toHaveBeenCalledWith(15, 25);
+    expect(ctx.lineCap).toBe("round");
+  });
 });

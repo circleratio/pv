@@ -63,12 +63,17 @@ export function getStrokes() {
   return strokes.map((stroke) => ({ ...stroke, points: [...stroke.points] }));
 }
 
-/** Dot radius for a canvas of the given size, relative to its shorter side. */
+/** Line half-width (and single-click dot radius) for a canvas of the given size. */
 export function calculateRadius(canvasWidth, canvasHeight) {
   return Math.min(canvasWidth, canvasHeight) * RADIUS_RATIO;
 }
 
-/** Draws all strokes onto the overlay canvas and discards fully faded ones. */
+/**
+ * Draws all strokes onto the overlay canvas as a rounded line connecting each
+ * point to the next (a single-point stroke, i.e. a plain click, is drawn as a
+ * zero-length segment, which renders as a round dot), and discards fully
+ * faded ones.
+ */
 export function render() {
   const now = Date.now();
   const canvas = document.getElementById("overlay-canvas");
@@ -77,14 +82,22 @@ export function render() {
   if (ctx) {
     const radius = calculateRadius(canvas.width, canvas.height);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = radius * 2;
     for (const stroke of strokes) {
       const opacity = calculateOpacity(stroke, now);
-      ctx.fillStyle = `rgba(${COLOR_RGB}, ${opacity})`;
-      for (const point of stroke.points) {
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-        ctx.fill();
+      ctx.strokeStyle = `rgba(${COLOR_RGB}, ${opacity})`;
+      ctx.beginPath();
+      const [first, ...rest] = stroke.points;
+      ctx.moveTo(first.x, first.y);
+      for (const point of rest) {
+        ctx.lineTo(point.x, point.y);
       }
+      if (rest.length === 0) {
+        ctx.lineTo(first.x, first.y);
+      }
+      ctx.stroke();
     }
   }
 
