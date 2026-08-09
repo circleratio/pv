@@ -1,5 +1,8 @@
 const FADE_DURATION_MS = 1500;
-const RADIUS_PX = 22; // ~44px diameter, within the 40-50px spec range
+// Radius as a fraction of the overlay canvas's shorter side, so the dot scales
+// with the display instead of staying a fixed pixel size. ~0.007 gives a ~11px
+// diameter on a ~768px-tall window, a quarter of the previous fixed 44px diameter.
+const RADIUS_RATIO = 0.007;
 const COLOR_RGB = "255, 140, 0"; // orange
 
 let strokes = [];
@@ -60,6 +63,11 @@ export function getStrokes() {
   return strokes.map((stroke) => ({ ...stroke, points: [...stroke.points] }));
 }
 
+/** Dot radius for a canvas of the given size, relative to its shorter side. */
+export function calculateRadius(canvasWidth, canvasHeight) {
+  return Math.min(canvasWidth, canvasHeight) * RADIUS_RATIO;
+}
+
 /** Draws all strokes onto the overlay canvas and discards fully faded ones. */
 export function render() {
   const now = Date.now();
@@ -67,13 +75,14 @@ export function render() {
   const ctx = canvas?.getContext("2d");
 
   if (ctx) {
+    const radius = calculateRadius(canvas.width, canvas.height);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     for (const stroke of strokes) {
       const opacity = calculateOpacity(stroke, now);
       ctx.fillStyle = `rgba(${COLOR_RGB}, ${opacity})`;
       for (const point of stroke.points) {
         ctx.beginPath();
-        ctx.arc(point.x, point.y, RADIUS_PX, 0, Math.PI * 2);
+        ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
         ctx.fill();
       }
     }

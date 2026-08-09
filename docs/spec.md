@@ -93,10 +93,11 @@ pv/
 | 要素 | 役割 |
 |---|---|
 | オーバーレイCanvas | PDF描画用Canvasの上に重ねて配置し、レーザーポインターの丸のみを描画する |
-| `startStroke(x, y)` | 新規ストロークを開始し、始点を記録 |
-| `addPoint(x, y)` | ドラッグ中の座標をストロークに追加 |
+| `startStroke(x, y)` | 新規ストロークを開始し、始点をCanvasローカル座標に変換して記録 |
+| `addPoint(x, y)` | ドラッグ中の座標をCanvasローカル座標に変換してストロークに追加 |
 | `endStroke()` | ストロークを確定し、フェードアウトアニメーションを開始 |
-| `render()` | `requestAnimationFrame`ループで全ストロークをオレンジの丸（直径約40〜50px相当）で描画。経過時間に応じて透明度を下げ、1〜2秒でフェードアウト完了後にストロークを破棄 |
+| `calculateRadius(canvasWidth, canvasHeight)` | オーバーレイCanvasの短辺に対する比率（`RADIUS_RATIO`）から丸の半径を算出する純粋関数。ウィンドウサイズが変わっても相対サイズを維持する |
+| `render()` | `requestAnimationFrame`ループで全ストロークをオレンジの丸（半径は`calculateRadius`で算出、Canvas短辺の約1.4%相当の直径）で描画。経過時間に応じて透明度を下げ、1〜2秒でフェードアウト完了後にストロークを破棄 |
 
 ## 3. 処理フロー
 

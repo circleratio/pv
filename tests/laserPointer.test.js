@@ -104,4 +104,12 @@ describe("laserPointer", () => {
     const strokes = laserPointer.getStrokes();
     expect(strokes[0].points).toEqual([{ x: 40, y: 60 }]);
   });
+
+  it("scales the dot radius with the canvas's shorter side instead of using a fixed size", () => {
+    expect(laserPointer.calculateRadius(800, 600)).toBeCloseTo(600 * 0.007);
+    expect(laserPointer.calculateRadius(600, 800)).toBeCloseTo(600 * 0.007);
+    expect(laserPointer.calculateRadius(1600, 1200)).toBeCloseTo(
+      2 * laserPointer.calculateRadius(800, 600)
+    );
+  });
 });
