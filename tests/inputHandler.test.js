@@ -66,25 +66,25 @@ describe("inputHandler", () => {
     expect(closeWindow).toHaveBeenCalledTimes(1);
   });
 
-  it("drives laserPointer through mousedown -> mousemove -> mouseup on the right button", () => {
+  it("drives laserPointer through mousedown -> mousemove -> mouseup on the left button", () => {
     const { target } = setUp();
     target.dispatchEvent(
-      new MouseEvent("mousedown", { button: 2, clientX: 10, clientY: 20 })
+      new MouseEvent("mousedown", { button: 0, clientX: 10, clientY: 20 })
     );
     target.dispatchEvent(
-      new MouseEvent("mousemove", { button: 2, clientX: 15, clientY: 25 })
+      new MouseEvent("mousemove", { button: 0, clientX: 15, clientY: 25 })
     );
-    target.dispatchEvent(new MouseEvent("mouseup", { button: 2 }));
+    target.dispatchEvent(new MouseEvent("mouseup", { button: 0 }));
 
     expect(laserPointer.startStroke).toHaveBeenCalledWith(10, 20);
     expect(laserPointer.addPoint).toHaveBeenCalledWith(15, 25);
     expect(laserPointer.endStroke).toHaveBeenCalledTimes(1);
   });
 
-  it("ignores mousedown/mouseup for buttons other than the right button", () => {
+  it("ignores mousedown/mouseup for buttons other than the left button", () => {
     const { target } = setUp();
-    target.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
-    target.dispatchEvent(new MouseEvent("mouseup", { button: 0 }));
+    target.dispatchEvent(new MouseEvent("mousedown", { button: 2 }));
+    target.dispatchEvent(new MouseEvent("mouseup", { button: 2 }));
 
     expect(laserPointer.startStroke).not.toHaveBeenCalled();
     expect(laserPointer.endStroke).not.toHaveBeenCalled();
@@ -100,7 +100,7 @@ describe("inputHandler", () => {
   it("keeps page navigation active while the laser pointer is in use", () => {
     const { target } = setUp();
     target.dispatchEvent(
-      new MouseEvent("mousedown", { button: 2, clientX: 0, clientY: 0 })
+      new MouseEvent("mousedown", { button: 0, clientX: 0, clientY: 0 })
     );
     target.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
 

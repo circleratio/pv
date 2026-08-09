@@ -3,7 +3,7 @@ import * as laserPointer from "./laserPointer.js";
 
 const NEXT_KEYS = ["ArrowRight", "ArrowDown", " "];
 const PREV_KEYS = ["ArrowLeft", "ArrowUp", "Backspace"];
-const RIGHT_BUTTON = 2;
+const LASER_POINTER_BUTTON = 0; // left mouse button
 
 let isPointerActive = false;
 let closeWindow = defaultCloseWindow;
@@ -33,7 +33,7 @@ function handleWheel(event) {
 }
 
 function handleMousedown(event) {
-  if (event.button !== RIGHT_BUTTON) return;
+  if (event.button !== LASER_POINTER_BUTTON) return;
   isPointerActive = true;
   laserPointer.startStroke(event.clientX, event.clientY);
 }
@@ -44,7 +44,7 @@ function handleMousemove(event) {
 }
 
 function handleMouseup(event) {
-  if (event.button !== RIGHT_BUTTON || !isPointerActive) return;
+  if (event.button !== LASER_POINTER_BUTTON || !isPointerActive) return;
   isPointerActive = false;
   laserPointer.endStroke();
 }
@@ -54,7 +54,7 @@ function handleContextmenu(event) {
 }
 
 /**
- * Wires up keyboard, wheel and right-click event handling.
+ * Wires up keyboard, wheel and left-click (laser pointer) event handling.
  * @param {{ target?: EventTarget, closeWindow?: () => void }} [options]
  */
 export function init({ target = window, closeWindow: closeWindowOverride } = {}) {
