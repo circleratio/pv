@@ -2,6 +2,7 @@ import * as pageNavigator from "./pageNavigator.js";
 import * as laserPointer from "./laserPointer.js";
 import * as fileHistory from "./fileHistory.js";
 import * as historyMenu from "./historyMenu.js";
+import * as fullscreen from "./fullscreen.js";
 
 const NEXT_KEYS = ["ArrowRight", "ArrowDown", " "];
 const PREV_KEYS = ["ArrowLeft", "ArrowUp", "Backspace"];
@@ -24,6 +25,25 @@ function handleKeydown(event) {
   } else if (PREV_KEYS.includes(event.key)) {
     pageNavigator.prev();
   } else if (event.key === "Escape") {
+    handleEscape();
+  }
+}
+
+async function handleEscape() {
+  let inFullscreen = false;
+  try {
+    inFullscreen = await fullscreen.isFullscreen();
+  } catch (error) {
+    console.error("Failed to check fullscreen state", error);
+  }
+
+  if (inFullscreen) {
+    try {
+      await fullscreen.exit();
+    } catch (error) {
+      console.error("Failed to exit fullscreen", error);
+    }
+  } else {
     closeWindow();
   }
 }
@@ -55,11 +75,27 @@ function handleMouseup(event) {
 
 function handleContextmenu(event) {
   event.preventDefault();
+  const { clientX, clientY } = event;
   const entries = fileHistory.getAll();
-  historyMenu.show(event.clientX, event.clientY, entries, {
-    onSelectEntry: (path) => openHistoryFile(path),
-    onOpenFile: () => openFileDialog(),
-  });
+
+  fullscreen
+    .isFullscreen()
+    .catch((error) => {
+      console.error("Failed to check fullscreen state", error);
+      return false;
+    })
+    .then((inFullscreen) => {
+      historyMenu.show(clientX, clientY, entries, {
+        onSelectEntry: (path) => openHistoryFile(path),
+        onOpenFile: () => openFileDialog(),
+        onToggleFullscreen: () => {
+          fullscreen
+            .toggle()
+            .catch((error) => console.error("Failed to toggle fullscreen", error));
+        },
+        isFullscreen: inFullscreen,
+      });
+    });
 }
 
 /**

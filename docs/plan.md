@@ -166,9 +166,46 @@
 - **テスト**（Vitest。`dragDrop`をモック）: 起動時（引数あり成功時・引数なし時）に`dragDrop.init`が`{ onDrop: openFile }`で呼ばれること／引数ありで`openFile`が失敗した場合は`dragDrop.init`が呼ばれないこと。
 - **完了条件**: 該当テストgreen。
 
-## Step 23: 結合・シナリオ確認
+## Step 23: ドラッグ＆ドロップ機能統合の完了
 
 - 依存: Step 20, Step 22
-- 全モジュールを結合したアプリケーションに対して、spec.md 5章「テスト設計」の29項目（起動、ページ送り、境界、終了、レーザーポインター、リサイズ、フィット表示、ファイル履歴、空白ウィンドウからのオープン、PDFオープン時のウィンドウリサイズ、ドラッグ＆ドロップ）を手動シナリオとして実施する。
+- Step 22までのドラッグ＆ドロップ機能統合を完了した状態。以降の全画面モード機能（Step 24〜27）はこの状態を土台に追加する。
+
+## Step 24: fullscreen.js
+
+- 依存: Step 0
+- `isFullscreen()`：`@tauri-apps/api/window` の `getCurrentWindow().isFullscreen()` を呼び出す非同期関数を実装する。
+- `toggle()`：`isFullscreen()`の結果を反転させて`setFullscreen()`を呼び出す非同期関数を実装する。
+- `exit()`：`setFullscreen(false)`を呼び出す非同期関数を実装する。
+- `src-tauri/capabilities/default.json` の `permissions` に `core:window:allow-is-fullscreen` / `core:window:allow-set-fullscreen` を追加する。
+- **テスト**（Vitest。`@tauri-apps/api/window`をモック）: `isFullscreen()`がモックの戻り値をそのまま返すこと／`toggle()`が全画面中は`setFullscreen(false)`、通常時は`setFullscreen(true)`を呼ぶこと／`exit()`が`setFullscreen(false)`を呼ぶこと。
+- **完了条件**: 該当テストgreen。
+
+## Step 25: historyMenu.js - 全画面トグル項目の追加
+
+- 依存: Step 13, Step 24
+- `show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen })` に対応する。「ファイルを開く」項目の次に全画面トグル項目を追加し、`isFullscreen`が真なら「全画面を解除」、偽なら「全画面にする」を表示する。クリックで `hide()` した上で `onToggleFullscreen()` を呼び出す。
+- **テスト**（Vitest。jsdom）: `isFullscreen: false`のとき「全画面にする」が表示されること／`isFullscreen: true`のとき「全画面を解除」が表示されること／クリックで`onToggleFullscreen`が呼ばれ、メニューが非表示になること。
+- **完了条件**: 該当テストgreen。
+
+## Step 26: inputHandler.js - Escapeキー・全画面メニューの統合
+
+- 依存: Step 8, Step 24, Step 25
+- `keydown`（Escape）のハンドラを、`fullscreen.isFullscreen()`を確認し、真であれば`fullscreen.exit()`（アプリは終了しない）、偽であれば従来通り`closeWindow()`を呼ぶように変更する。
+- `contextmenu` ハンドラで `fullscreen.isFullscreen()` の結果を取得し、`historyMenu.show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen })` に `onToggleFullscreen: () => fullscreen.toggle()` と現在の全画面状態を渡すように拡張する。
+- **テスト**（Vitest。jsdomでのイベントディスパッチ、`fullscreen`をモック）: 全画面中にEscapeを押すと`fullscreen.exit()`が呼ばれ`closeWindow`は呼ばれないこと／通常時にEscapeを押すと従来通り`closeWindow`が呼ばれること／右クリックで`historyMenu.show`に現在の`isFullscreen`状態と`onToggleFullscreen`コールバックが渡されること。
+- **完了条件**: 該当テストgreen。
+
+## Step 27: app.js - 全画面中のリサイズ抑止
+
+- 依存: Step 19, Step 24
+- `openFile(path)` 内のリサイズ処理（`pdfViewer.getPageAspectRatio` → `windowSizer.fitToAspectRatio`）を、`fullscreen.isFullscreen()` が偽の場合のみ実行するように変更する。真の場合はリサイズ処理をスキップし、全画面モードを維持する。
+- **テスト**（Vitest。`fullscreen`/`windowSizer`をモック）: 全画面中は`windowSizer.fitToAspectRatio`が呼ばれないこと／通常時は従来通り呼ばれること。
+- **完了条件**: 該当テストgreen。
+
+## Step 28: 結合・シナリオ確認
+
+- 依存: Step 23, Step 26, Step 27
+- 全モジュールを結合したアプリケーションに対して、spec.md 5章「テスト設計」の34項目（起動、ページ送り、境界、終了、レーザーポインター、リサイズ、フィット表示、ファイル履歴、空白ウィンドウからのオープン、PDFオープン時のウィンドウリサイズ、ドラッグ＆ドロップ、全画面モード）を手動シナリオとして実施する。
 - 併せて `npm test` / `cargo test` を通しで実行し、これまでの自動テストがすべてgreenであることを確認する。
-- **完了条件**: 自動テストが全てgreen、かつspec.md 5章の29項目すべてが合格する。
+- **完了条件**: 自動テストが全てgreen、かつspec.md 5章の34項目すべてが合格する。

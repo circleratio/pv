@@ -26,7 +26,8 @@ pv/
 │       ├── fileHistory.js   # ファイル履歴の保持・重複排除・永続化
 │       ├── historyMenu.js   # 右クリックで表示する履歴選択メニューのUI
 │       ├── windowSizer.js   # PDFのアスペクト比に合わせたウィンドウリサイズ
-│       └── dragDrop.js      # ウィンドウへのファイルドラッグ＆ドロップ処理
+│       ├── dragDrop.js      # ウィンドウへのファイルドラッグ＆ドロップ処理
+│       └── fullscreen.js    # 全画面モードの状態取得・トグル・解除
 ├── tests/              # フロントエンド単体テスト（Vitest）
 │   ├── pdfViewer.test.js
 │   ├── pageNavigator.test.js
@@ -36,6 +37,7 @@ pv/
 │   ├── historyMenu.test.js
 │   ├── windowSizer.test.js
 │   ├── dragDrop.test.js
+│   ├── fullscreen.test.js
 │   └── fixtures/       # テスト用の簡易PDFサンプル（縦長・横長各1点程度）
 ├── package.json
 └── vite.config.js
@@ -61,9 +63,9 @@ pv/
 
 - アプリ起動時の初期化処理を行うエントリポイント。
 - `get_initial_pdf_path` を呼び出し、パスが得られればそのPDFを読み込む。パスが得られない場合はPDFを読み込まず、空白のウィンドウのまま初期化を完了する（ファイル選択ダイアログは自動表示しない）。
-- 各モジュール（`pdfViewer` / `pageNavigator` / `inputHandler` / `laserPointer` / `fileHistory` / `historyMenu` / `windowSizer` / `dragDrop`）を初期化・連携させる。`inputHandler.init()` は起動時にPDFを読み込めたかどうかに関わらず必ず実行し、右クリックメニュー（「ファイルを開く」・履歴）を常に利用可能にする。`dragDrop.init({ onDrop: openFile })` も同様にPDFの読み込み結果に関わらず必ず実行し、ドラッグ＆ドロップでのファイルオープンを常に利用可能にする。
+- 各モジュール（`pdfViewer` / `pageNavigator` / `inputHandler` / `laserPointer` / `fileHistory` / `historyMenu` / `windowSizer` / `dragDrop` / `fullscreen`）を初期化・連携させる。`inputHandler.init()` は起動時にPDFを読み込めたかどうかに関わらず必ず実行し、右クリックメニュー（「ファイルを開く」・全画面トグル・履歴）を常に利用可能にする。`dragDrop.init({ onDrop: openFile })` も同様にPDFの読み込み結果に関わらず必ず実行し、ドラッグ＆ドロップでのファイルオープンを常に利用可能にする。
 - 起動時に `fileHistory.load()` を呼び出し、保存済み履歴を読み込んでおく。
-- `openFile(path)`: PDFを開く一連の処理（`read_pdf_file` → `pdfViewer.loadPdf` → `pdfViewer.getPageAspectRatio(1)` → `windowSizer.fitToAspectRatio(aspectRatio)` → `pageNavigator.init` → `pdfViewer.renderPage(1)`）を共通関数として提供し、成功時に `fileHistory.add(path)` を呼び出す。起動時（引数指定時）・「ファイルを開く」ダイアログ経由・履歴メニュー経由・ドラッグ＆ドロップ経由のいずれのPDFオープンもこの関数を通す。`windowSizer.fitToAspectRatio` が失敗しても`console.error`にログを出力するのみで処理は継続する（ウィンドウリサイズはPDF表示に必須ではないため）。
+- `openFile(path)`: PDFを開く一連の処理（`read_pdf_file` → `pdfViewer.loadPdf` → 全画面モードでなければ `pdfViewer.getPageAspectRatio(1)` → `windowSizer.fitToAspectRatio(aspectRatio)` → `pageNavigator.init` → `pdfViewer.renderPage(1)`）を共通関数として提供し、成功時に `fileHistory.add(path)` を呼び出す。起動時（引数指定時）・「ファイルを開く」ダイアログ経由・履歴メニュー経由・ドラッグ＆ドロップ経由のいずれのPDFオープンもこの関数を通す。`fullscreen.isFullscreen()` が真の場合はウィンドウリサイズ処理自体を行わず全画面モードを維持する。`windowSizer.fitToAspectRatio`（および`fullscreen.isFullscreen`のチェック）が失敗しても`console.error`にログを出力するのみで処理は継続する（ウィンドウリサイズはPDF表示に必須ではないため）。
 - `openFileViaDialog()`: `tauri-plugin-dialog` の `open()` でファイル選択ダイアログを表示し、選択された場合のみ `openFile(path)` を呼び出す。ダイアログがキャンセルされた場合（`open()` が `null` を返す場合）は何もしない。`inputHandler` の右クリックメニューの「ファイルを開く」から呼び出される。
 - エラーハンドリング:
   - 起動時に引数でPDFパスが指定されており、その `openFile(path)` が失敗（`read_pdf_file`・`pdfViewer.loadPdf` のいずれかが失敗）した場合は、`console.error`にログを出力したうえで画面にエラーメッセージを表示し、`inputHandler.init()` を含む以降の初期化処理は行わない（アプリケーションはクラッシュさせない。再度のファイル選択などのリトライ導線は設けない）。
@@ -95,13 +97,13 @@ pv/
 |---|---|
 | `keydown`（→・↓・Space） | `pageNavigator.next()` |
 | `keydown`（←・↑・Backspace） | `pageNavigator.prev()` |
-| `keydown`（Escape） | アプリ終了（Tauriウィンドウクローズ） |
+| `keydown`（Escape） | `fullscreen.isFullscreen()`を確認し、真であれば`fullscreen.exit()`で全画面モードを解除する（アプリは終了しない）。偽であればアプリ終了（Tauriウィンドウクローズ） |
 | `wheel`（下回転） | `pageNavigator.next()` |
 | `wheel`（上回転） | `pageNavigator.prev()` |
 | `mousedown`（左ボタン） | `laserPointer.startStroke(x, y)`、レーザーポインターモード開始 |
 | `mousemove`（左ボタン押下中） | `laserPointer.addPoint(x, y)` |
 | `mouseup`（左ボタン） | `laserPointer.endStroke()`、レーザーポインターモード終了・フェードアウト開始 |
-| `contextmenu`（右ボタン） | ブラウザ標準コンテキストメニューを`preventDefault()`で抑止したうえで、`fileHistory.getAll()`で履歴一覧を取得し`historyMenu.show(x, y, entries, { onSelectEntry, onOpenFile })`を表示する。`onSelectEntry`には選択パスで`app.js`の`openFile(path)`を呼び出すコールバック、`onOpenFile`には`app.js`の`openFileViaDialog()`を呼び出すコールバックを渡す |
+| `contextmenu`（右ボタン） | ブラウザ標準コンテキストメニューを`preventDefault()`で抑止したうえで、`fileHistory.getAll()`で履歴一覧、`fullscreen.isFullscreen()`で現在の全画面状態を取得し、`historyMenu.show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen })`を表示する。`onSelectEntry`には選択パスで`app.js`の`openFile(path)`を呼び出すコールバック、`onOpenFile`には`app.js`の`openFileViaDialog()`を呼び出すコールバック、`onToggleFullscreen`には`fullscreen.toggle()`を呼び出すコールバックを渡す |
 
 - レーザーポインターモード中も上記のページ送り系イベントは無効化せず、そのまま`pageNavigator`へ委譲する。
 - 右ボタンには履歴メニュー表示以外の機能を割り当てない。
@@ -118,7 +120,7 @@ pv/
 
 | 関数 | 役割 |
 |---|---|
-| `show(x, y, entries, { onSelectEntry, onOpenFile })` | 指定座標にポップアップメニューをDOMで表示する。メニューの先頭には常に「ファイルを開く」項目を表示し、クリック時に`hide()`したうえで`onOpenFile()`を呼び出す。続けて履歴一覧を表示する。履歴が0件の場合は「履歴なし」を表示し選択不可とする。履歴項目クリック時は`hide()`したうえで`onSelectEntry(path)`を呼び出す |
+| `show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen })` | 指定座標にポップアップメニューをDOMで表示する。メニューの先頭には常に「ファイルを開く」項目を表示し、クリック時に`hide()`したうえで`onOpenFile()`を呼び出す。続けて全画面トグル項目を表示する（`isFullscreen`が真なら「全画面を解除」、偽なら「全画面にする」という表示文言にし、クリック時に`hide()`したうえで`onToggleFullscreen()`を呼び出す）。続けて履歴一覧を表示する。履歴が0件の場合は「履歴なし」を表示し選択不可とする。履歴項目クリック時は`hide()`したうえで`onSelectEntry(path)`を呼び出す |
 | `hide()` | メニューを非表示にして破棄する。メニュー外のクリックでも呼び出される |
 
 ### 2.9 windowSizer.js
@@ -137,6 +139,16 @@ Tauriの権限設定（`src-tauri/capabilities/default.json`）に、ウィン�
 | `init({ onDrop })` | Tauriの`@tauri-apps/api/window`（`getCurrentWindow`）の`onDragDropEvent`でOSレベルのファイルドラッグ＆ドロップを監視する非同期関数。イベントの`type`が`"drop"`の場合、`paths`配列の先頭要素（1件目）のみを対象に`onDrop(path)`を呼び出す（複数ファイルが同時にドロップされた場合、2件目以降は無視する）。`type`が`"drop"`以外（`enter`/`over`/`leave`）の場合は何もしない |
 
 Tauriのデフォルト設定では、ウィンドウのOSレベルドラッグ＆ドロップ（`dragDropEnabled`）は有効になっており、`tauri.conf.json`の変更は不要。イベント購読自体は `core:default`（`core:event:default`に含まれる`allow-listen`）で許可されるため、`capabilities/default.json`への追加権限も不要。
+
+### 2.11 fullscreen.js
+
+| 関数 | 役割 |
+|---|---|
+| `isFullscreen()` | Tauriの`@tauri-apps/api/window`（`getCurrentWindow`）の`isFullscreen()`を呼び出し、現在のウィンドウが全画面モードかどうかを返す非同期関数 |
+| `toggle()` | `isFullscreen()`で現在の状態を取得し、`setFullscreen(!現在の状態)`で全画面⇔通常を切り替える非同期関数 |
+| `exit()` | `setFullscreen(false)`を呼び出し、全画面モードを解除する非同期関数（既に通常モードの場合も安全に呼び出せる） |
+
+Tauriの権限設定（`src-tauri/capabilities/default.json`）に、全画面切り替えに必要な `core:window:allow-is-fullscreen` / `core:window:allow-set-fullscreen` を追加する。
 
 ### 2.6 laserPointer.js
 
@@ -176,11 +188,15 @@ openFile(path) の内部:
    pdfViewer.loadPdf(binaryData) → 総ページ数取得
    │
    ▼
-   pdfViewer.getPageAspectRatio(1) → 1ページ目のアスペクト比取得
+   fullscreen.isFullscreen() を確認
    │
-   ▼
-   windowSizer.fitToAspectRatio(aspectRatio)
-   （最大化中なら解除 → 現在の面積を保ってアスペクト比に合わせてリサイズ。失敗してもログのみで継続）
+   ├─ 真（全画面モード中） → リサイズ処理をスキップ（全画面を維持）
+   │
+   └─ 偽 → pdfViewer.getPageAspectRatio(1) → 1ページ目のアスペクト比取得
+          │
+          ▼
+          windowSizer.fitToAspectRatio(aspectRatio)
+          （最大化中なら解除 → 現在の面積を保ってアスペクト比に合わせてリサイズ。失敗してもログのみで継続）
    │
    ▼
    pageNavigator.init(totalPages)
@@ -256,12 +272,17 @@ pdfViewer.onResize()
 inputHandler: preventDefault() → fileHistory.getAll()
    │
    ▼
-historyMenu.show(x, y, entries, { onSelectEntry, onOpenFile })
+inputHandler: fullscreen.isFullscreen() で現在の全画面状態を取得
+   │
+   ▼
+historyMenu.show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen })
    │
    ├─（「ファイルを開く」クリック）→ hide() → onOpenFile() → app.js: openFileViaDialog()
    │        │
    │        ├─ ダイアログでファイル選択 → openFile(path)
    │        └─ ダイアログをキャンセル → 何もしない
+   │
+   ├─（全画面トグル項目クリック）→ hide() → onToggleFullscreen() → fullscreen.toggle()
    │
    └─（履歴項目クリック）→ hide() → onSelectEntry(path) → app.js: openFile(path)
 
@@ -283,6 +304,19 @@ dragDrop: event.payload.type === "drop" を判定
           │
           ▼
         onDrop(path) → app.js: openFile(path)
+```
+
+### 3.7 Escapeキー・全画面フロー
+
+```
+keydown（Escape）
+   │
+   ▼
+inputHandler: fullscreen.isFullscreen() を確認
+   │
+   ├─ 真（全画面モード中） → fullscreen.exit() で全画面を解除（アプリは終了しない）
+   │
+   └─ 偽 → closeWindow() でアプリを終了
 ```
 
 ## 4. データ設計
@@ -330,7 +364,7 @@ dragDrop: event.payload.type === "drop" を判定
 | 5 | ページ送り（後退） | ←・↑・Backspace・ホイール上回転 | 現在ページが-1され再描画される |
 | 6 | 境界（先頭） | 1ページ目で後退操作 | ページ番号が変化しない |
 | 7 | 境界（末尾） | 最終ページで前進操作 | ページ番号が変化しない |
-| 8 | 終了 | Escキー押下 | アプリケーションウィンドウが閉じる |
+| 8 | 終了 | 通常モード（全画面でない状態）でEscキー押下 | アプリケーションウィンドウが閉じる |
 | 9 | レーザーポインター（クリック） | 左クリックのみ（ドラッグなし）で離す | クリック位置にオレンジの点が表示され、1〜2秒でフェードアウトする |
 | 10 | レーザーポインター（ドラッグ） | 左クリック押下したままマウス移動後に離す | 移動の軌跡に沿ってオレンジの線が表示され、フェードアウトする |
 | 11 | レーザーポインター中のページ送り | 左クリック押下中に矢印キーでページ送り | ページが送られ、レーザーポインター表示・モードは継続する |
@@ -352,3 +386,8 @@ dragDrop: event.payload.type === "drop" を判定
 | 27 | ドラッグ＆ドロップ（単一ファイル） | PDFファイル1件をウィンドウにドラッグ＆ドロップ | そのPDFが開かれ、1ページ目が表示され、履歴に記録される |
 | 28 | ドラッグ＆ドロップ（複数ファイル） | PDFファイル複数件を同時にウィンドウにドラッグ＆ドロップ | 先頭の1件のみが開かれる |
 | 29 | ドラッグ＆ドロップ（空白ウィンドウ） | 引数なしで起動した空白のウィンドウにPDFファイルをドラッグ＆ドロップ | そのPDFが開かれる |
+| 30 | 全画面トグル（メニュー文言） | 通常モードで右クリック→全画面モードで右クリック | 通常モードでは「全画面にする」、全画面モードでは「全画面を解除」がメニューに表示される |
+| 31 | 全画面トグル（有効化） | 右クリックメニューから「全画面にする」を選択 | ウィンドウが全画面表示になる |
+| 32 | 全画面トグル（解除） | 全画面モード中に右クリックメニューから「全画面を解除」を選択 | ウィンドウが通常表示に戻る |
+| 33 | 全画面中のEsc | 全画面モード中にEscキーを押す | 全画面モードが解除され、アプリケーションは終了しない |
+| 34 | 全画面中のPDFオープン | 全画面モード中に「ファイルを開く」・履歴・ドラッグ＆ドロップのいずれかでPDFを開く | 全画面モードが維持され、ウィンドウのリサイズ（アスペクト比合わせ）は行われない |

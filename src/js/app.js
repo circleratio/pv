@@ -6,6 +6,7 @@ import * as inputHandler from "./inputHandler.js";
 import * as fileHistory from "./fileHistory.js";
 import * as windowSizer from "./windowSizer.js";
 import * as dragDrop from "./dragDrop.js";
+import * as fullscreen from "./fullscreen.js";
 
 function showError(message) {
   const viewer = document.getElementById("viewer");
@@ -41,8 +42,11 @@ export async function openFile(path) {
   }
 
   try {
-    const aspectRatio = await pdfViewer.getPageAspectRatio(1);
-    await windowSizer.fitToAspectRatio(aspectRatio);
+    const inFullscreen = await fullscreen.isFullscreen();
+    if (!inFullscreen) {
+      const aspectRatio = await pdfViewer.getPageAspectRatio(1);
+      await windowSizer.fitToAspectRatio(aspectRatio);
+    }
   } catch (error) {
     console.error("Failed to resize window to fit the PDF", error);
   }

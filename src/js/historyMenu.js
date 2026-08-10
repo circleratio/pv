@@ -16,13 +16,18 @@ function removeMenu() {
 
 /**
  * Shows a popup menu at the given viewport position: an always-present
- * "open file" item followed by the file history.
+ * "open file" item, a fullscreen toggle item, and the file history.
  * @param {number} x
  * @param {number} y
  * @param {string[]} entries file paths, newest first
- * @param {{ onSelectEntry: (path: string) => void, onOpenFile: () => void }} callbacks
+ * @param {{ onSelectEntry: (path: string) => void, onOpenFile: () => void, onToggleFullscreen: () => void, isFullscreen: boolean }} callbacks
  */
-export function show(x, y, entries, { onSelectEntry, onOpenFile }) {
+export function show(
+  x,
+  y,
+  entries,
+  { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen }
+) {
   hide();
 
   const menu = document.createElement("ul");
@@ -39,6 +44,15 @@ export function show(x, y, entries, { onSelectEntry, onOpenFile }) {
     onOpenFile();
   });
   menu.appendChild(openFileItem);
+
+  const fullscreenItem = document.createElement("li");
+  fullscreenItem.className = "history-menu-item history-menu-fullscreen-item";
+  fullscreenItem.textContent = isFullscreen ? "全画面を解除" : "全画面にする";
+  fullscreenItem.addEventListener("click", () => {
+    hide();
+    onToggleFullscreen();
+  });
+  menu.appendChild(fullscreenItem);
 
   if (entries.length === 0) {
     const empty = document.createElement("li");

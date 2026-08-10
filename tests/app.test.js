@@ -7,6 +7,7 @@ import * as inputHandler from "../src/js/inputHandler.js";
 import * as fileHistory from "../src/js/fileHistory.js";
 import * as windowSizer from "../src/js/windowSizer.js";
 import * as dragDrop from "../src/js/dragDrop.js";
+import * as fullscreen from "../src/js/fullscreen.js";
 import { start, openFile, openFileViaDialog } from "../src/js/app.js";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -29,6 +30,9 @@ vi.mock("../src/js/windowSizer.js", () => ({
 vi.mock("../src/js/dragDrop.js", () => ({
   init: vi.fn(),
 }));
+vi.mock("../src/js/fullscreen.js", () => ({
+  isFullscreen: vi.fn(),
+}));
 
 describe("app.start", () => {
   beforeEach(() => {
@@ -36,6 +40,7 @@ describe("app.start", () => {
     document.body.innerHTML = `<div id="viewer"><canvas id="pdf-canvas"></canvas></div>`;
     pdfViewer.loadPdf.mockResolvedValue(3);
     windowSizer.fitToAspectRatio.mockResolvedValue(undefined);
+    fullscreen.isFullscreen.mockResolvedValue(false);
   });
 
   it("shows the PDF and wires up inputHandler when a path argument was given", async () => {
@@ -115,6 +120,7 @@ describe("app.openFile", () => {
     document.body.innerHTML = `<div id="viewer"><canvas id="pdf-canvas"></canvas></div>`;
     pdfViewer.loadPdf.mockResolvedValue(3);
     windowSizer.fitToAspectRatio.mockResolvedValue(undefined);
+    fullscreen.isFullscreen.mockResolvedValue(false);
   });
 
   it("resizes the window to the PDF's aspect ratio before rendering", async () => {
@@ -125,6 +131,18 @@ describe("app.openFile", () => {
 
     expect(pdfViewer.getPageAspectRatio).toHaveBeenCalledWith(1);
     expect(windowSizer.fitToAspectRatio).toHaveBeenCalledWith(1.5);
+  });
+
+  it("skips the resize when currently in fullscreen", async () => {
+    invoke.mockResolvedValue(new Uint8Array([1, 2, 3]));
+    fullscreen.isFullscreen.mockResolvedValue(true);
+
+    const result = await openFile("resized.pdf");
+
+    expect(result).toBe(true);
+    expect(pdfViewer.getPageAspectRatio).not.toHaveBeenCalled();
+    expect(windowSizer.fitToAspectRatio).not.toHaveBeenCalled();
+    expect(pdfViewer.renderPage).toHaveBeenCalledWith(1);
   });
 
   it("still shows the PDF and records it in history when resizing fails", async () => {
@@ -173,6 +191,7 @@ describe("app.openFileViaDialog", () => {
     document.body.innerHTML = `<div id="viewer"><canvas id="pdf-canvas"></canvas></div>`;
     pdfViewer.loadPdf.mockResolvedValue(3);
     windowSizer.fitToAspectRatio.mockResolvedValue(undefined);
+    fullscreen.isFullscreen.mockResolvedValue(false);
   });
 
   it("opens the file chosen in the dialog", async () => {

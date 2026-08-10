@@ -3,6 +3,7 @@ import * as pageNavigator from "../src/js/pageNavigator.js";
 import * as laserPointer from "../src/js/laserPointer.js";
 import * as fileHistory from "../src/js/fileHistory.js";
 import * as historyMenu from "../src/js/historyMenu.js";
+import * as fullscreen from "../src/js/fullscreen.js";
 import { init } from "../src/js/inputHandler.js";
 
 vi.mock("../src/js/pageNavigator.js", () => ({
@@ -24,6 +25,12 @@ vi.mock("../src/js/historyMenu.js", () => ({
   show: vi.fn(),
 }));
 
+vi.mock("../src/js/fullscreen.js", () => ({
+  isFullscreen: vi.fn(),
+  toggle: vi.fn(),
+  exit: vi.fn(),
+}));
+
 function setUp(overrides = {}) {
   const target = new EventTarget();
   const closeWindow = vi.fn();
@@ -36,6 +43,9 @@ function setUp(overrides = {}) {
 describe("inputHandler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fullscreen.isFullscreen.mockResolvedValue(false);
+    fullscreen.toggle.mockResolvedValue(undefined);
+    fullscreen.exit.mockResolvedValue(undefined);
   });
 
   it.each([
@@ -72,10 +82,21 @@ describe("inputHandler", () => {
     expect(pageNavigator.prev).toHaveBeenCalledTimes(1);
   });
 
-  it("closes the window on Escape", () => {
+  it("closes the window on Escape when not in fullscreen", async () => {
     const { target, closeWindow } = setUp();
     target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    expect(closeWindow).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(closeWindow).toHaveBeenCalledTimes(1));
+    expect(fullscreen.exit).not.toHaveBeenCalled();
+  });
+
+  it("exits fullscreen instead of closing the window on Escape when in fullscreen", async () => {
+    fullscreen.isFullscreen.mockResolvedValue(true);
+    const { target, closeWindow } = setUp();
+
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+
+    await vi.waitFor(() => expect(fullscreen.exit).toHaveBeenCalledTimes(1));
+    expect(closeWindow).not.toHaveBeenCalled();
   });
 
   it("drives laserPointer through mousedown -> mousemove -> mouseup on the left button", () => {
@@ -109,40 +130,71 @@ describe("inputHandler", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it("shows the history menu with the current history on right-click", () => {
+  it("shows the history menu with the current history and fullscreen state on right-click", async () => {
     fileHistory.getAll.mockReturnValue(["a.pdf", "b.pdf"]);
+    fullscreen.isFullscreen.mockResolvedValue(false);
     const { target } = setUp();
 
     target.dispatchEvent(
       new MouseEvent("contextmenu", { clientX: 30, clientY: 40, cancelable: true })
     );
 
-    expect(historyMenu.show).toHaveBeenCalledWith(
-      30,
-      40,
-      ["a.pdf", "b.pdf"],
-      { onSelectEntry: expect.any(Function), onOpenFile: expect.any(Function) }
+    await vi.waitFor(() => expect(historyMenu.show).toHaveBeenCalledTimes(1));
+    expect(historyMenu.show).toHaveBeenCalledWith(30, 40, ["a.pdf", "b.pdf"], {
+      onSelectEntry: expect.any(Function),
+      onOpenFile: expect.any(Function),
+      onToggleFullscreen: expect.any(Function),
+      isFullscreen: false,
+    });
+  });
+
+  it("passes the current fullscreen state to the history menu when in fullscreen", async () => {
+    fullscreen.isFullscreen.mockResolvedValue(true);
+    const { target } = setUp();
+
+    target.dispatchEvent(new MouseEvent("contextmenu", { cancelable: true }));
+
+    await vi.waitFor(() =>
+      expect(historyMenu.show).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ isFullscreen: true })
+      )
     );
   });
 
-  it("calls openHistoryFile with the selected path from the history menu", () => {
+  it("calls openHistoryFile with the selected path from the history menu", async () => {
     const { target, openHistoryFile } = setUp();
 
     target.dispatchEvent(new MouseEvent("contextmenu", { cancelable: true }));
+    await vi.waitFor(() => expect(historyMenu.show).toHaveBeenCalledTimes(1));
     const { onSelectEntry } = historyMenu.show.mock.calls[0][3];
     onSelectEntry("picked.pdf");
 
     expect(openHistoryFile).toHaveBeenCalledWith("picked.pdf");
   });
 
-  it("calls openFileDialog when the history menu's 'open file' item is chosen", () => {
+  it("calls openFileDialog when the history menu's 'open file' item is chosen", async () => {
     const { target, openFileDialog } = setUp();
 
     target.dispatchEvent(new MouseEvent("contextmenu", { cancelable: true }));
+    await vi.waitFor(() => expect(historyMenu.show).toHaveBeenCalledTimes(1));
     const { onOpenFile } = historyMenu.show.mock.calls[0][3];
     onOpenFile();
 
     expect(openFileDialog).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles fullscreen when the history menu's fullscreen item is chosen", async () => {
+    const { target } = setUp();
+
+    target.dispatchEvent(new MouseEvent("contextmenu", { cancelable: true }));
+    await vi.waitFor(() => expect(historyMenu.show).toHaveBeenCalledTimes(1));
+    const { onToggleFullscreen } = historyMenu.show.mock.calls[0][3];
+    onToggleFullscreen();
+
+    expect(fullscreen.toggle).toHaveBeenCalledTimes(1);
   });
 
   it("keeps page navigation active while the laser pointer is in use", () => {
