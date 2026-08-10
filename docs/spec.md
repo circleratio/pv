@@ -100,13 +100,14 @@ pv/
 | `keydown`（Escape） | `fullscreen.isFullscreen()`を確認し、真であれば`fullscreen.exit()`で全画面モードを解除する（アプリは終了しない）。偽であればアプリ終了（Tauriウィンドウクローズ） |
 | `wheel`（下回転） | `pageNavigator.next()` |
 | `wheel`（上回転） | `pageNavigator.prev()` |
-| `mousedown`（左ボタン） | `laserPointer.startStroke(x, y)`、レーザーポインターモード開始 |
+| `mousedown`（左ボタン） | クリック対象がプレゼン画面（`#viewer`）内である場合のみ、`laserPointer.startStroke(x, y)`、レーザーポインターモード開始。右クリックメニュー等`#viewer`外のUI要素上でのクリックは無視する |
 | `mousemove`（左ボタン押下中） | `laserPointer.addPoint(x, y)` |
 | `mouseup`（左ボタン） | `laserPointer.endStroke()`、レーザーポインターモード終了・フェードアウト開始 |
 | `contextmenu`（右ボタン） | ブラウザ標準コンテキストメニューを`preventDefault()`で抑止したうえで、`fileHistory.getAll()`で履歴一覧、`fullscreen.isFullscreen()`で現在の全画面状態を取得し、`historyMenu.show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen })`を表示する。`onSelectEntry`には選択パスで`app.js`の`openFile(path)`を呼び出すコールバック、`onOpenFile`には`app.js`の`openFileViaDialog()`を呼び出すコールバック、`onToggleFullscreen`には`fullscreen.toggle()`を呼び出すコールバックを渡す |
 
 - レーザーポインターモード中も上記のページ送り系イベントは無効化せず、そのまま`pageNavigator`へ委譲する。
 - 右ボタンには履歴メニュー表示以外の機能を割り当てない。
+- `isOnPresentationSurface(target)`: `target.closest("#viewer")`の有無でプレゼン画面内でのクリックかどうかを判定する純粋関数。`target`が`closest`を持たない場合（DOM要素でない場合）は`true`を返す。`mousedown`ハンドラは、この関数が`false`を返す場合（履歴メニューなど`#viewer`外の要素をクリックした場合）、レーザーポインターを開始しない
 
 ### 2.7 fileHistory.js
 
@@ -391,3 +392,4 @@ inputHandler: fullscreen.isFullscreen() を確認
 | 32 | 全画面トグル（解除） | 全画面モード中に右クリックメニューから「全画面を解除」を選択 | ウィンドウが通常表示に戻る |
 | 33 | 全画面中のEsc | 全画面モード中にEscキーを押す | 全画面モードが解除され、アプリケーションは終了しない |
 | 34 | 全画面中のPDFオープン | 全画面モード中に「ファイルを開く」・履歴・ドラッグ＆ドロップのいずれかでPDFを開く | 全画面モードが維持され、ウィンドウのリサイズ（アスペクト比合わせ）は行われない |
+| 35 | レーザーポインター対象外（右クリックメニュー） | 右クリックでメニューを表示し、メニュー項目を左クリックで選択 | レーザーポインターは表示されず、選択した操作（ファイルを開く／全画面トグル／履歴オープン）のみが行われる |

@@ -123,6 +123,41 @@ describe("inputHandler", () => {
     expect(laserPointer.endStroke).not.toHaveBeenCalled();
   });
 
+  it("starts the laser pointer when clicking inside the presentation surface (#viewer)", () => {
+    const target = document.createElement("div");
+    const viewer = document.createElement("div");
+    viewer.id = "viewer";
+    const canvas = document.createElement("canvas");
+    viewer.appendChild(canvas);
+    target.appendChild(viewer);
+    init({ target });
+
+    canvas.dispatchEvent(
+      new MouseEvent("mousedown", { button: 0, bubbles: true, clientX: 10, clientY: 20 })
+    );
+
+    expect(laserPointer.startStroke).toHaveBeenCalledWith(10, 20);
+  });
+
+  it("does not start the laser pointer when clicking outside the presentation surface (e.g. the history menu)", () => {
+    const target = document.createElement("div");
+    const viewer = document.createElement("div");
+    viewer.id = "viewer";
+    const menu = document.createElement("ul");
+    menu.id = "history-menu";
+    const menuItem = document.createElement("li");
+    menu.appendChild(menuItem);
+    target.appendChild(viewer);
+    target.appendChild(menu);
+    init({ target });
+
+    menuItem.dispatchEvent(
+      new MouseEvent("mousedown", { button: 0, bubbles: true, clientX: 10, clientY: 20 })
+    );
+
+    expect(laserPointer.startStroke).not.toHaveBeenCalled();
+  });
+
   it("prevents the default context menu", () => {
     const { target } = setUp();
     const event = new MouseEvent("contextmenu", { cancelable: true });

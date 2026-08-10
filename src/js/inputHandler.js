@@ -56,8 +56,19 @@ function handleWheel(event) {
   }
 }
 
+/**
+ * Whether `target` is inside the presentation surface (#viewer), as opposed
+ * to overlay UI such as the right-click history menu. Targets that aren't
+ * real DOM elements (e.g. test doubles) are treated as on the surface.
+ */
+function isOnPresentationSurface(target) {
+  if (!target || typeof target.closest !== "function") return true;
+  return !!target.closest("#viewer");
+}
+
 function handleMousedown(event) {
   if (event.button !== LASER_POINTER_BUTTON) return;
+  if (!isOnPresentationSurface(event.target)) return;
   isPointerActive = true;
   laserPointer.startStroke(event.clientX, event.clientY);
 }
