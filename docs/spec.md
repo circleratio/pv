@@ -121,7 +121,8 @@ pv/
 
 | 関数 | 役割 |
 |---|---|
-| `show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen })` | 指定座標にポップアップメニューをDOMで表示する。メニューの先頭には常に「ファイルを開く」項目を表示し、クリック時に`hide()`したうえで`onOpenFile()`を呼び出す。続けて全画面トグル項目を表示する（`isFullscreen`が真なら「全画面を解除」、偽なら「全画面にする」という表示文言にし、クリック時に`hide()`したうえで`onToggleFullscreen()`を呼び出す）。続けて履歴一覧を表示する。履歴が0件の場合は「履歴なし」を表示し選択不可とする。履歴項目クリック時は`hide()`したうえで`onSelectEntry(path)`を呼び出す |
+| `show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen })` | 指定座標にポップアップメニューをDOMで表示する。メニューの先頭には常に「ファイルを開く」項目を表示し、クリック時に`hide()`したうえで`onOpenFile()`を呼び出す。続けて全画面トグル項目を表示する（`isFullscreen`が真なら「全画面を解除」、偽なら「全画面にする」という表示文言にし、クリック時に`hide()`したうえで`onToggleFullscreen()`を呼び出す）。続けて履歴一覧を表示する。履歴が0件の場合は「履歴なし」を表示し選択不可とする。履歴項目クリック時は`hide()`したうえで`onSelectEntry(path)`を呼び出す。DOM追加後に`clampToViewport(menu)`を呼び出し、画面端をはみ出さないよう位置を調整する |
+| `clampToViewport(menu)` | `menu.getBoundingClientRect()`で実際の幅・高さを測定し、右端/下端が`window.innerWidth`/`innerHeight`を超える場合のみ`left`/`top`を左・上にずらす（メニュー自体がビューポートより大きい場合は`0px`にクランプする）。検討した代替案は[knowledge.md](knowledge.md)を参照 |
 | `hide()` | メニューを非表示にして破棄する。メニュー外のクリックでも呼び出される |
 
 ### 2.9 windowSizer.js
@@ -393,3 +394,4 @@ inputHandler: fullscreen.isFullscreen() を確認
 | 33 | 全画面中のEsc | 全画面モード中にEscキーを押す | 全画面モードが解除され、アプリケーションは終了しない |
 | 34 | 全画面中のPDFオープン | 全画面モード中に「ファイルを開く」・履歴・ドラッグ＆ドロップのいずれかでPDFを開く | 全画面モードが維持され、ウィンドウのリサイズ（アスペクト比合わせ）は行われない |
 | 35 | レーザーポインター対象外（右クリックメニュー） | 右クリックでメニューを表示し、メニュー項目を左クリックで選択 | レーザーポインターは表示されず、選択した操作（ファイルを開く／全画面トグル／履歴オープン）のみが行われる |
+| 36 | 右クリックメニューの画面端クランプ | ウィンドウ右端・下端に近い位置で右クリック | メニュー全体が画面内に収まり、右側・下側が切れない |

@@ -3,6 +3,22 @@ const MENU_ID = "history-menu";
 let menuElement = null;
 let outsideMousedownHandler = null;
 
+/**
+ * Shifts `menu` left/up, if needed, so it stays fully within the viewport
+ * instead of being clipped at the right/bottom edge.
+ * @param {HTMLElement} menu
+ */
+function clampToViewport(menu) {
+  const rect = menu.getBoundingClientRect();
+
+  if (rect.right > window.innerWidth) {
+    menu.style.left = `${Math.max(0, window.innerWidth - rect.width)}px`;
+  }
+  if (rect.bottom > window.innerHeight) {
+    menu.style.top = `${Math.max(0, window.innerHeight - rect.height)}px`;
+  }
+}
+
 function removeMenu() {
   if (menuElement) {
     menuElement.remove();
@@ -74,6 +90,7 @@ export function show(
 
   document.body.appendChild(menu);
   menuElement = menu;
+  clampToViewport(menu);
 
   outsideMousedownHandler = (event) => {
     if (menuElement && !menuElement.contains(event.target)) {

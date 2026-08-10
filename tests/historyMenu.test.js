@@ -25,13 +25,31 @@ function callbacks(overrides = {}) {
   };
 }
 
+/**
+ * jsdom does not perform real layout, so getBoundingClientRect() normally
+ * returns an all-zero rect. Stub it to reflect the menu's inline left/top
+ * plus a fixed size, so viewport-clamping logic can be exercised.
+ */
+function mockMenuRect(width, height) {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function () {
+      const left = parseFloat(this.style.left) || 0;
+      const top = parseFloat(this.style.top) || 0;
+      return { left, top, width, height, right: left + width, bottom: top + height };
+    }
+  );
+}
+
 describe("historyMenu", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
+    window.innerWidth = 1024;
+    window.innerHeight = 768;
   });
 
   afterEach(() => {
     historyMenu.hide();
+    vi.restoreAllMocks();
   });
 
   it("always shows a clickable 'open file' item", () => {
@@ -125,5 +143,47 @@ describe("historyMenu", () => {
     document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
 
     expect(document.getElementById("history-menu")).toBeNull();
+  });
+
+  it("keeps the click position when the menu fits within the viewport", () => {
+    mockMenuRect(200, 150);
+
+    historyMenu.show(50, 50, [], callbacks());
+
+    const menu = document.getElementById("history-menu");
+    expect(menu.style.left).toBe("50px");
+    expect(menu.style.top).toBe("50px");
+  });
+
+  it("shifts the menu left so it does not overflow the right edge", () => {
+    mockMenuRect(200, 150);
+    window.innerWidth = 300;
+
+    historyMenu.show(250, 50, [], callbacks());
+
+    const menu = document.getElementById("history-menu");
+    expect(menu.style.left).toBe("100px");
+  });
+
+  it("shifts the menu up so it does not overflow the bottom edge", () => {
+    mockMenuRect(200, 150);
+    window.innerHeight = 300;
+
+    historyMenu.show(50, 250, [], callbacks());
+
+    const menu = document.getElementById("history-menu");
+    expect(menu.style.top).toBe("150px");
+  });
+
+  it("clamps to the left/top edge when the menu is wider/taller than the viewport", () => {
+    mockMenuRect(500, 500);
+    window.innerWidth = 300;
+    window.innerHeight = 300;
+
+    historyMenu.show(250, 250, [], callbacks());
+
+    const menu = document.getElementById("history-menu");
+    expect(menu.style.left).toBe("0px");
+    expect(menu.style.top).toBe("0px");
   });
 });
