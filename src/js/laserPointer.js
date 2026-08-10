@@ -1,4 +1,4 @@
-const FADE_DURATION_MS = 1500;
+const FADE_DURATION_MS = 1000;
 // Radius as a fraction of the overlay canvas's shorter side, so the dot scales
 // with the display instead of staying a fixed pixel size. ~0.007 gives a ~11px
 // diameter on a ~768px-tall window, a quarter of the previous fixed 44px diameter.

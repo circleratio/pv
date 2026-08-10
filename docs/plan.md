@@ -301,3 +301,32 @@
 - 依存: Step 42
 - Step 42までの実装を土台に、spec.md 5章のテストケース46〜48を手動シナリオとして実施する。併せて`npm test`を通しで実行し、すべての自動テストがgreenであることを確認する。
 - **完了条件**: 自動テストが全てgreen、かつspec.md 5章のケース46〜48すべてが合格する。
+
+## Step 44: windowSizer.js - 画面サイズへのクランプ追加
+
+- 依存: Step 18
+- 現状の`calculateSize(currentWidth, currentHeight, aspectRatio)`は面積維持・アスペクト比維持のみを行い、算出結果が画面をはみ出すケースを考慮していない（spec.md 2.9節の変更に対応）。シグネチャを`calculateSize(currentWidth, currentHeight, aspectRatio, maxWidth, maxHeight)`に変更し、算出した`width`/`height`が`maxWidth`/`maxHeight`のいずれかを超える場合は、アスペクト比を保ったまま`width <= maxWidth かつ height <= maxHeight`となる最大サイズに縮小するロジックを追加する。
+- `fitToAspectRatio(aspectRatio)`を、`@tauri-apps/api/window`の`getCurrentWindow().currentMonitor()`で現在表示中のディスプレイの`size`（物理ピクセル）を取得し、それを`maxWidth`/`maxHeight`として`calculateSize`に渡すよう変更する。`currentMonitor()`が`null`を返す場合（取得失敗時）はクランプを行わず従来通りの挙動にフォールバックする。
+- `src-tauri/capabilities/default.json`の`permissions`に`core:window:allow-current-monitor`を追加する。
+- **テスト**（Vitest。`calculateSize`は純粋関数として直接テスト。`fitToAspectRatio`は`@tauri-apps/api/window`をモック）: 算出サイズが`maxWidth`/`maxHeight`以内に収まる場合はクランプされずそのまま返ること／算出サイズが`maxWidth`または`maxHeight`を超える場合、アスペクト比を保ったまま画面に収まる最大サイズに縮小されること／`fitToAspectRatio`が`currentMonitor()`の`size`を`calculateSize`の`maxWidth`/`maxHeight`に渡すこと／`currentMonitor()`が`null`の場合はクランプなしで`setSize()`が呼ばれること。
+- **完了条件**: 該当テストgreen。
+
+## Step 45: fullscreen.js - 全画面解除時にリサイズを行わないことの回帰防止テスト
+
+- 依存: Step 24, Step 27
+- spec.md 2.11節の追記に対応する。`exit()`・`toggle()`は現状も`windowSizer`を呼び出しておらず、全画面解除時に全画面中に開いたPDFのアスペクト比が後追い適用されることはない（`setFullscreen(false)`はOS標準の挙動で全画面前のウィンドウサイズへ復帰する）。この既存の挙動を仕様として固定するため、実装変更は行わず回帰防止テストのみを追加する。
+- **テスト**（Vitest。`windowSizer`をモックしスパイで呼び出しを検知）: `fullscreen.exit()`実行時に`windowSizer.fitToAspectRatio`が呼ばれないこと／`fullscreen.toggle()`で全画面→通常に切り替わる場合も`windowSizer.fitToAspectRatio`が呼ばれないこと／Escapeキーで全画面解除される場合（`inputHandler`経由）も同様に呼ばれないこと。
+- **完了条件**: 該当テストgreen。
+
+## Step 46: laserPointer.js - フェードアウト時間を約1秒に固定
+
+- 依存: Step 7
+- spec.mdの表記変更（「1〜2秒程度」→「約1秒」）に対応し、`FADE_DURATION_MS`の値を`1500`から`1000`に変更する。
+- **テスト**（Vitest。`vi.useFakeTimers()`等で時間経過をシミュレート）: `endStroke()`から1000ms経過時点で`calculateOpacity`が0になること（既存テストが1500ms基準であれば1000ms基準に更新する）。
+- **完了条件**: 該当テストgreen。
+
+## Step 47: リサイズ・全画面・レーザーポインター確定仕様の反映完了
+
+- 依存: Step 44, Step 45, Step 46
+- Step 44〜46までの実装を土台に、spec.md 5章のテストケース57・58を手動シナリオとして実施する。併せて`npm test` / `cargo test`を通しで実行し、すべての自動テストがgreenであることを確認する。
+- **完了条件**: 自動テストが全てgreen、かつspec.md 5章のケース57・58が合格する。

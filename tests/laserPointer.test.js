@@ -57,7 +57,7 @@ describe("laserPointer", () => {
     const opacityAtEnd = laserPointer.calculateOpacity(stroke, Date.now());
     expect(opacityAtEnd).toBe(1);
 
-    vi.advanceTimersByTime(750); // half of the 1500ms fade duration
+    vi.advanceTimersByTime(500); // half of the 1000ms fade duration
     const opacityHalfway = laserPointer.calculateOpacity(stroke, Date.now());
     expect(opacityHalfway).toBeCloseTo(0.5);
     expect(opacityHalfway).toBeLessThan(opacityAtEnd);
@@ -67,7 +67,7 @@ describe("laserPointer", () => {
     laserPointer.startStroke(10, 20);
     laserPointer.endStroke();
 
-    vi.advanceTimersByTime(1500);
+    vi.advanceTimersByTime(1000);
     laserPointer.render();
 
     expect(laserPointer.getStrokes()).toHaveLength(0);

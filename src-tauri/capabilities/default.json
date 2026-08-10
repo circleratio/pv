@@ -10,6 +10,7 @@
     "core:window:allow-is-maximized",
     "core:window:allow-set-size",
     "core:window:allow-unmaximize",
+    "core:window:allow-current-monitor",
     "core:window:allow-is-fullscreen",
     "core:window:allow-set-fullscreen",
     "dialog:default"

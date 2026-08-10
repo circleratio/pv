@@ -5,6 +5,7 @@ import * as fileHistory from "../src/js/fileHistory.js";
 import * as historyMenu from "../src/js/historyMenu.js";
 import * as fullscreen from "../src/js/fullscreen.js";
 import * as slideListView from "../src/js/slideListView.js";
+import * as windowSizer from "../src/js/windowSizer.js";
 import { init } from "../src/js/inputHandler.js";
 
 vi.mock("../src/js/pageNavigator.js", () => ({
@@ -39,6 +40,10 @@ vi.mock("../src/js/slideListView.js", () => ({
   isActive: vi.fn(() => false),
   show: vi.fn(),
   hide: vi.fn(),
+}));
+
+vi.mock("../src/js/windowSizer.js", () => ({
+  fitToAspectRatio: vi.fn(),
 }));
 
 function setUp(overrides = {}) {
@@ -110,6 +115,9 @@ describe("inputHandler", () => {
 
     await vi.waitFor(() => expect(fullscreen.exit).toHaveBeenCalledTimes(1));
     expect(closeWindow).not.toHaveBeenCalled();
+    // Exiting fullscreen must not re-apply the aspect-ratio resize that was
+    // skipped while a PDF was opened during fullscreen (requirement.md「ウィンドウ」節).
+    expect(windowSizer.fitToAspectRatio).not.toHaveBeenCalled();
   });
 
   it("drives laserPointer through mousedown -> mousemove -> mouseup on the left button", () => {
@@ -246,6 +254,9 @@ describe("inputHandler", () => {
     onToggleFullscreen();
 
     expect(fullscreen.toggle).toHaveBeenCalledTimes(1);
+    // Toggling out of fullscreen via the menu must not re-apply the
+    // aspect-ratio resize either (same rule as the Escape-key path).
+    expect(windowSizer.fitToAspectRatio).not.toHaveBeenCalled();
   });
 
   it("passes canShowSlideList=true and the current slide list state to the history menu", async () => {

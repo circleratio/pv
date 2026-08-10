@@ -54,7 +54,7 @@ pv/
 | 要素 | 役割 |
 |---|---|
 | `main()` | Tauriアプリ起動。コマンドライン引数（`std::env::args()`）からPDFパスを取得しウィンドウ生成 |
-| Tauriコマンド `get_initial_pdf_path` | 起動時引数で渡されたPDFファイルパスを返す（未指定時は`None`） |
+| Tauriコマンド `get_initial_pdf_path` | 起動時引数で渡されたPDFファイルパスを返す（未指定時は`None`）。相対パスの場合は`std::env::current_dir()`を基準に絶対パスへ変換したうえで返す（シンボリックリンクの解決は行わない、単純なパス結合による正規化） |
 | Tauriコマンド `read_pdf_file(path: String)` | 指定パスのPDFファイルをバイナリ（`Vec<u8>`）として読み込み返却。存在しない・読み込み失敗時はエラーを返す |
 | Tauriコマンド `load_history()` | アプリデータディレクトリの `history.json` を読み込み、履歴（ファイルパスの配列、最新が先頭）を返す。ファイルが存在しない場合は空配列を返す |
 | Tauriコマンド `save_history(history: Vec<String>)` | 渡された履歴（ファイルパスの配列）で `history.json` を上書き保存する。ディレクトリが存在しない場合は作成する |
@@ -67,11 +67,12 @@ pv/
 - `get_initial_pdf_path` を呼び出し、パスが得られればそのPDFを読み込む。パスが得られない場合はPDFを読み込まず、空白のウィンドウのまま初期化を完了する（ファイル選択ダイアログは自動表示しない）。
 - 各モジュール（`pdfViewer` / `pageNavigator` / `inputHandler` / `laserPointer` / `fileHistory` / `historyMenu` / `windowSizer` / `dragDrop` / `fullscreen`）を初期化・連携させる。`inputHandler.init()` は起動時にPDFを読み込めたかどうかに関わらず必ず実行し、右クリックメニュー（「ファイルを開く」・全画面トグル・履歴）を常に利用可能にする。`dragDrop.init({ onDrop: openFile })` も同様にPDFの読み込み結果に関わらず必ず実行し、ドラッグ＆ドロップでのファイルオープンを常に利用可能にする。
 - 起動時に `fileHistory.load()` を呼び出し、保存済み履歴を読み込んでおく。
-- `openFile(path)`: PDFを開く一連の処理（`read_pdf_file` → `pdfViewer.loadPdf` → 全画面モードでなければ `pdfViewer.getPageAspectRatio(1)` → `windowSizer.fitToAspectRatio(aspectRatio)` → `pageNavigator.init` → `pdfViewer.renderPage(1)`）を共通関数として提供し、成功時に `fileHistory.add(path)` を呼び出す。起動時（引数指定時）・「ファイルを開く」ダイアログ経由・履歴メニュー経由・ドラッグ＆ドロップ経由のいずれのPDFオープンもこの関数を通す。`fullscreen.isFullscreen()` が真の場合はウィンドウリサイズ処理自体を行わず全画面モードを維持する。`windowSizer.fitToAspectRatio`（および`fullscreen.isFullscreen`のチェック）が失敗しても`console.error`にログを出力するのみで処理は継続する（ウィンドウリサイズはPDF表示に必須ではないため）。
-- `openFileViaDialog()`: `tauri-plugin-dialog` の `open()` でファイル選択ダイアログを表示し、選択された場合のみ `openFile(path)` を呼び出す。ダイアログがキャンセルされた場合（`open()` が `null` を返す場合）は何もしない。`inputHandler` の右クリックメニューの「ファイルを開く」から呼び出される。
+- `openFile(path)`: PDFを開く一連の処理（`slideListView.isActive()`が真であれば`slideListView.hide()`でスライド一覧表示モードを終了 → `read_pdf_file` → `pdfViewer.loadPdf` → 全画面モードでなければ `pdfViewer.getPageAspectRatio(1)` → `windowSizer.fitToAspectRatio(aspectRatio)` → `pageNavigator.init` → `pdfViewer.renderPage(1)`）を共通関数として提供し、成功時に `fileHistory.add(path)` を呼び出す。起動時（引数指定時）・「ファイルを開く」ダイアログ経由・履歴メニュー経由・ドラッグ＆ドロップ経由のいずれのPDFオープンもこの関数を通すため、スライド一覧表示モード中に新しいPDFを開いた場合も必ず通常表示（1ページ目）に切り替わる（起動時は`slideListView`が非アクティブなためこの分岐は影響しない）。`fullscreen.isFullscreen()` が真の場合はウィンドウリサイズ処理自体を行わず全画面モードを維持する。`windowSizer.fitToAspectRatio`（および`fullscreen.isFullscreen`のチェック）が失敗しても`console.error`にログを出力するのみで処理は継続する（ウィンドウリサイズはPDF表示に必須ではないため）。処理の成否を呼び出し元に伝えるため、成功時は`true`、失敗時は`false`を返す。
+- `openFileViaDialog()`: `tauri-plugin-dialog` の `open()` でファイル選択ダイアログを表示し、選択された場合のみ `openFile(path)` を呼び出す。ダイアログがキャンセルされた場合（`open()` が `null` を返す場合）は何もしない。`inputHandler` の右クリックメニューの「ファイルを開く」から呼び出される。`open()`が返すパスはOS側で絶対パスとして解決済みのため、`get_initial_pdf_path`のような追加の絶対パス変換は行わない（ドラッグ＆ドロップで`dragDrop.js`が受け取るパスも同様）。
+- `openFileFromHistory(path)`: `openFile(path)` を呼び出し、戻り値が`false`（失敗）であれば `fileHistory.remove(path)` を呼び出してそのエントリを履歴から削除する（`save_history`により永続化される）。`inputHandler` の右クリックメニューの履歴項目クリックから呼び出される（`onSelectEntry`はこの関数を呼ぶ）。
 - エラーハンドリング:
   - 起動時に引数でPDFパスが指定されており、その `openFile(path)` が失敗（`read_pdf_file`・`pdfViewer.loadPdf` のいずれかが失敗）した場合は、`console.error`にログを出力したうえで画面にエラーメッセージを表示し、`inputHandler.init()` を含む以降の初期化処理は行わない（アプリケーションはクラッシュさせない。再度のファイル選択などのリトライ導線は設けない）。
-  - 「ファイルを開く」・履歴メニュー経由の `openFile(path)` が失敗した場合は、画面にエラーメッセージを表示するが、`inputHandler` は初期化済みのため右クリックメニューは引き続き利用できる。
+  - 「ファイルを開く」・履歴メニュー経由の `openFile(path)` が失敗した場合は、画面にエラーメッセージを表示するが、`inputHandler` は初期化済みのため右クリックメニューは引き続き利用できる。履歴メニュー経由（`openFileFromHistory`）の場合は、上記のとおり該当エントリを履歴から削除する。
   - いずれの場合も失敗した場合は履歴に追加しない。
 
 ### 2.3 pdfViewer.js
@@ -84,6 +85,8 @@ pv/
 | `getPageAspectRatio(pageNumber)` | 指定ページ（省略時は1）をscale 1で取得し、幅/高さのアスペクト比を返す。`loadPdf`後にのみ呼び出せる |
 | `onResize()` | ウィンドウリサイズ時に現在ページを再描画 |
 | `renderThumbnail(pageNumber, canvas, maxWidth)` | 指定ページを取得し、幅が`maxWidth`に収まるスケールで指定Canvasに描画する（スライド一覧表示用）。`renderPage`が使う`#pdf-canvas`とは別のCanvasを呼び出しごとに受け取るため、`renderPage`の世代カウンタ／`RenderTask`キャンセル機構は使わない（同一Canvasへの並行アクセスが起きないため衝突しない） |
+
+ウィンドウのアスペクト比は`openFile`時に1ページ目のみを基準に決定する（`getPageAspectRatio(1)`、3.1節参照）。PDF内で2ページ目以降のアスペクト比が1ページ目と異なる場合、`calculateFitScale`によりウィンドウ内に収まるよう縮小されるため、そのページの表示時に余白が生じることがあるが、これは仕様として許容する（ページ送りのたびにウィンドウをリサイズすることはしない）。
 
 ### 2.4 pageNavigator.js
 
@@ -102,17 +105,17 @@ pv/
 |---|---|
 | `keydown`（→・↓・Space） | `slideListView.isActive()`が真の間は何もしない。偽であれば`pageNavigator.next()` |
 | `keydown`（←・↑・Backspace） | `slideListView.isActive()`が真の間は何もしない。偽であれば`pageNavigator.prev()` |
-| `keydown`（Escape） | 他のキーより先に判定する。まず`slideListView.isActive()`を確認し、真であれば`slideListView.hide()`でスライド一覧表示モードを終了する（アプリは終了しない）。偽であれば従来通り`fullscreen.isFullscreen()`を確認し、真であれば`fullscreen.exit()`で全画面モードを解除する（アプリは終了しない）。いずれも偽であればアプリ終了（Tauriウィンドウクローズ） |
+| `keydown`（Escape） | 他のキーより先に判定する。まず`historyMenu.isOpen()`を確認し、真であれば`historyMenu.hide()`でメニューを閉じるのみとする（全画面解除・スライド一覧表示終了・アプリ終了のいずれも行わない）。偽であれば`slideListView.isActive()`を確認し、真であれば`slideListView.hide()`でスライド一覧表示モードを終了する（アプリは終了しない）。偽であれば従来通り`fullscreen.isFullscreen()`を確認し、真であれば`fullscreen.exit()`で全画面モードを解除する（アプリは終了しない）。いずれも偽であればアプリ終了（Tauriウィンドウクローズ） |
 | `wheel`（下回転） | `slideListView.isActive()`が真の間は何もしない。偽であれば`pageNavigator.next()` |
 | `wheel`（上回転） | `slideListView.isActive()`が真の間は何もしない。偽であれば`pageNavigator.prev()` |
 | `mousedown`（左ボタン） | クリック対象がプレゼン画面（`#viewer`）内である場合のみ、`laserPointer.startStroke(x, y)`、レーザーポインターモード開始。右クリックメニュー等`#viewer`外のUI要素上でのクリックは無視する |
 | `mousemove`（左ボタン押下中） | `laserPointer.addPoint(x, y)` |
 | `mouseup`（左ボタン） | `laserPointer.endStroke()`、レーザーポインターモード終了・フェードアウト開始 |
-| `contextmenu`（右ボタン） | ブラウザ標準コンテキストメニューを`preventDefault()`で抑止したうえで、`fileHistory.getAll()`で履歴一覧、`fullscreen.isFullscreen()`で現在の全画面状態、`pageNavigator.getTotalPages() > 0`でスライド一覧表示可否（`canShowSlideList`）、`slideListView.isActive()`で現在のスライド一覧表示状態を取得し、`historyMenu.show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen, onToggleSlideList, isSlideListActive, canShowSlideList })`を表示する。`onSelectEntry`には選択パスで`app.js`の`openFile(path)`を呼び出すコールバック、`onOpenFile`には`app.js`の`openFileViaDialog()`を呼び出すコールバック、`onToggleFullscreen`には`fullscreen.toggle()`を呼び出すコールバック、`onToggleSlideList`には後述の`toggleSlideListView()`を呼び出すコールバックを渡す |
+| `contextmenu`（右ボタン） | ブラウザ標準コンテキストメニューを`preventDefault()`で抑止したうえで、`fileHistory.getAll()`で履歴一覧、`fullscreen.isFullscreen()`で現在の全画面状態、`pageNavigator.getTotalPages() > 0`でスライド一覧表示可否（`canShowSlideList`）、`slideListView.isActive()`で現在のスライド一覧表示状態を取得し、`historyMenu.show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen, onToggleSlideList, isSlideListActive, canShowSlideList })`を表示する。`onSelectEntry`には選択パスで`app.js`の`openFileFromHistory(path)`を呼び出すコールバック、`onOpenFile`には`app.js`の`openFileViaDialog()`を呼び出すコールバック、`onToggleFullscreen`には`fullscreen.toggle()`を呼び出すコールバック、`onToggleSlideList`には後述の`toggleSlideListView()`を呼び出すコールバックを渡す |
 
 - レーザーポインターモード中も上記のページ送り系イベントは無効化せず、そのまま`pageNavigator`へ委譲する。
 - 右ボタンには履歴メニュー表示以外の機能を割り当てない。
-- `isOnPresentationSurface(target)`: `target.closest("#viewer")`の有無でプレゼン画面内でのクリックかどうかを判定する純粋関数。`target`が`closest`を持たない場合（DOM要素でない場合）は`true`を返す。`mousedown`ハンドラは、この関数が`false`を返す場合（履歴メニューなど`#viewer`外の要素をクリックした場合）、レーザーポインターを開始しない
+- `isOnPresentationSurface(target)`: `target.closest("#viewer")`の有無でプレゼン画面内でのクリックかどうかを判定する純粋関数。`target`が`closest`を持たない場合（DOM要素でない場合）は`true`を返す。`mousedown`ハンドラは、この関数が`false`を返す場合（履歴メニューなど`#viewer`外の要素をクリックした場合）、レーザーポインターを開始しない。スライド一覧表示中のグリッド（`#slide-list-view`、2.12節参照）は`#viewer`の外側にDOM追加されるため、この判定により自動的にレーザーポインター対象外となり、グリッド内タイルへの左クリックはスライド一覧表示の選択操作としてのみ機能する
 - `toggleSlideListView()`: `slideListView.isActive()`が真であれば`slideListView.hide()`を呼ぶ。偽であれば`slideListView.show(pageNavigator.getTotalPages(), pageNavigator.getCurrentPage(), { onSelectSlide, onHighlightSlide })`を呼ぶ。`onHighlightSlide(page)`（シングルクリック）は`pageNavigator.goTo(page)`で現在ページを更新するのみでモードは終了しない。`onSelectSlide(page)`（ダブルクリック）は同じく`pageNavigator.goTo(page)`で現在ページを更新したうえで`slideListView.hide()`を呼び、通常表示モードへ戻す。`pageNavigator.goTo(page)`は`init()`時に登録済みの`onChange`コールバック経由で`pdfViewer.renderPage(page)`を呼ぶため、一覧表示モード中にシングルクリックした時点で背後の`#pdf-canvas`は既に更新されており、Esc・再トグル・ダブルクリックのいずれで一覧表示を終了してもその時点のカレントページがそのまま表示される
 
 ### 2.7 fileHistory.js
@@ -120,7 +123,8 @@ pv/
 | 関数 | 役割 |
 |---|---|
 | `load()` | Tauriコマンド`load_history`を呼び出し、履歴一覧（最新が先頭の文字列配列）を取得して内部状態に保持する |
-| `add(path)` | 指定パスを履歴に追加する。既に同じパスが履歴内に存在する場合は既存項目を削除してから先頭に追加する（重複排除・最新への繰り上げ）。追加後、件数が10件を超える場合は末尾（最古）を削除して10件に保つ。更新後の履歴でTauriコマンド`save_history`を呼び出し永続化する |
+| `add(path)` | 指定パスを履歴に追加する。既に同じパスが履歴内に存在する場合（文字列としての完全一致。大文字小文字・シンボリックリンク等の正規化は行わない）は既存項目を削除してから先頭に追加する（重複排除・最新への繰り上げ）。追加後、件数が10件を超える場合は末尾（最古）を削除して10件に保つ。更新後の履歴でTauriコマンド`save_history`を呼び出し永続化する |
+| `remove(path)` | 指定パスと文字列完全一致するエントリを履歴から削除する（存在しない場合は何もしない）。削除後の履歴でTauriコマンド`save_history`を呼び出し永続化する。履歴からの再オープンに失敗した場合に`app.js`から呼び出される |
 | `getAll()` | 現在保持している履歴一覧（最新が先頭の文字列配列）を返す |
 
 ### 2.8 historyMenu.js
@@ -130,21 +134,22 @@ pv/
 | `show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen, onToggleSlideList, isSlideListActive, canShowSlideList })` | 指定座標にポップアップメニューをDOMで表示する。メニューの先頭には常に「ファイルを開く」項目を表示し、クリック時に`hide()`したうえで`onOpenFile()`を呼び出す。続けて全画面トグル項目を表示する（`isFullscreen`が真なら「全画面を解除」、偽なら「全画面にする」という表示文言にし、クリック時に`hide()`したうえで`onToggleFullscreen()`を呼び出す）。続けてスライド一覧表示トグル項目を表示する（`isSlideListActive`が真なら「スライド一覧表示を解除」、偽なら「スライド一覧表示にする」という表示文言にする。`canShowSlideList`が偽（PDF未読込）の場合はクリック不可のグレーアウト表示にしクリックリスナーを付けない。真の場合はクリック時に`hide()`したうえで`onToggleSlideList()`を呼び出す）。続けて履歴一覧を表示する。履歴が0件の場合は「履歴なし」を表示し選択不可とする。履歴項目クリック時は`hide()`したうえで`onSelectEntry(path)`を呼び出す。DOM追加後に`clampToViewport(menu)`を呼び出し、画面端をはみ出さないよう位置を調整する |
 | `clampToViewport(menu)` | `menu.getBoundingClientRect()`で実際の幅・高さを測定し、右端/下端が`window.innerWidth`/`innerHeight`を超える場合のみ`left`/`top`を左・上にずらす（メニュー自体がビューポートより大きい場合は`0px`にクランプする）。検討した代替案は[knowledge.md](knowledge.md)を参照 |
 | `hide()` | メニューを非表示にして破棄する。メニュー外のクリックでも呼び出される |
+| `isOpen()` | メニューが現在表示中かどうかを返す（モジュール内で保持するメニュー要素の有無で判定）。`inputHandler`のEscapeキー処理から、他の判定に先立って参照される |
 
 ### 2.9 windowSizer.js
 
 | 関数 | 役割 |
 |---|---|
-| `calculateSize(currentWidth, currentHeight, aspectRatio)` | 現在のウィンドウ幅・高さから面積を算出し、その面積をなるべく保ちつつ指定アスペクト比（幅/高さ）となる幅・高さを算出する純粋関数（`height = sqrt(面積 / aspectRatio)`、`width = height * aspectRatio`、四捨五入）。 |
-| `fitToAspectRatio(aspectRatio)` | Tauriの`@tauri-apps/api/window`（`getCurrentWindow`）を用いて、現在のウィンドウが最大化中であれば`unmaximize()`を呼び出したうえで、`innerSize()`と`calculateSize`から算出した新サイズを`setSize()`で適用する非同期関数 |
+| `calculateSize(currentWidth, currentHeight, aspectRatio, maxWidth, maxHeight)` | 現在のウィンドウ幅・高さから面積を算出し、その面積をなるべく保ちつつ指定アスペクト比（幅/高さ）となる幅・高さを算出する純粋関数（`height = sqrt(面積 / aspectRatio)`、`width = height * aspectRatio`、四捨五入）。算出結果が`maxWidth`または`maxHeight`を超える場合は、アスペクト比を保ったまま`width <= maxWidth かつ height <= maxHeight`となる最大サイズに縮小する |
+| `fitToAspectRatio(aspectRatio)` | Tauriの`@tauri-apps/api/window`（`getCurrentWindow`）を用いて、現在のウィンドウが最大化中であれば`unmaximize()`を呼び出したうえで、`innerSize()`・`currentMonitor()`（現在表示中のディスプレイの`size`を`maxWidth`/`maxHeight`として使用）と`calculateSize`から算出した新サイズを`setSize()`で適用する非同期関数 |
 
-Tauriの権限設定（`src-tauri/capabilities/default.json`）に、ウィンドウリサイズに必要な `core:window:allow-inner-size` / `core:window:allow-is-maximized` / `core:window:allow-set-size` / `core:window:allow-unmaximize` を追加する。
+Tauriの権限設定（`src-tauri/capabilities/default.json`）に、ウィンドウリサイズに必要な `core:window:allow-inner-size` / `core:window:allow-is-maximized` / `core:window:allow-set-size` / `core:window:allow-unmaximize` / `core:window:allow-current-monitor` を追加する。
 
 ### 2.10 dragDrop.js
 
 | 関数 | 役割 |
 |---|---|
-| `init({ onDrop })` | Tauriの`@tauri-apps/api/window`（`getCurrentWindow`）の`onDragDropEvent`でOSレベルのファイルドラッグ＆ドロップを監視する非同期関数。イベントの`type`が`"drop"`の場合、`paths`配列の先頭要素（1件目）のみを対象に`onDrop(path)`を呼び出す（複数ファイルが同時にドロップされた場合、2件目以降は無視する）。`type`が`"drop"`以外（`enter`/`over`/`leave`）の場合は何もしない |
+| `init({ onDrop })` | Tauriの`@tauri-apps/api/window`（`getCurrentWindow`）の`onDragDropEvent`でOSレベルのファイルドラッグ＆ドロップを監視する非同期関数。イベントの`type`が`"drop"`の場合、`paths`配列の先頭要素（1件目。配列内の順序はTauri/OSがイベントとして渡す順序をそのまま用い、アプリ側では並べ替えない）のみを対象とする（2件目以降は無視する）。その1件が拡張子`.pdf`（大文字小文字を区別しない）でない場合は何もせず`onDrop`を呼び出さない。`.pdf`であれば`onDrop(path)`を呼び出す。`type`が`"drop"`以外（`enter`/`over`/`leave`）の場合は何もしない |
 
 Tauriのデフォルト設定では、ウィンドウのOSレベルドラッグ＆ドロップ（`dragDropEnabled`）は有効になっており、`tauri.conf.json`の変更は不要。イベント購読自体は `core:default`（`core:event:default`に含まれる`allow-listen`）で許可されるため、`capabilities/default.json`への追加権限も不要。
 
@@ -158,6 +163,8 @@ Tauriのデフォルト設定では、ウィンドウのOSレベルドラッグ�
 
 Tauriの権限設定（`src-tauri/capabilities/default.json`）に、全画面切り替えに必要な `core:window:allow-is-fullscreen` / `core:window:allow-set-fullscreen` を追加する。
 
+`exit()`・`toggle()`による全画面解除時は、`windowSizer`を呼び出さない（全画面モード中に開いたPDFのアスペクト比に基づくリサイズは行わない）。`setFullscreen(false)`はOS標準の挙動として全画面に入る前のウィンドウサイズへ自動的に復帰するため、追加のリサイズ処理は不要。
+
 ### 2.6 laserPointer.js
 
 | 要素 | 役割 |
@@ -167,7 +174,7 @@ Tauriの権限設定（`src-tauri/capabilities/default.json`）に、全画面�
 | `addPoint(x, y)` | ドラッグ中の座標をCanvasローカル座標に変換してストロークに追加 |
 | `endStroke()` | ストロークを確定し、フェードアウトアニメーションを開始 |
 | `calculateRadius(canvasWidth, canvasHeight)` | オーバーレイCanvasの短辺に対する比率（`RADIUS_RATIO`）から線の太さ（半径換算）を算出する純粋関数。ウィンドウサイズが変わっても相対サイズを維持する |
-| `render()` | `requestAnimationFrame`ループで、各ストロークの記録点を`moveTo`/`lineTo`で結んだ1本のオレンジの線として`lineCap: round`で描画（太さは`calculateRadius`の2倍、Canvas短辺の約1.4%相当）。1点のみのストローク（ドラッグなしのクリック）は始点から始点への長さ0の線分となり、丸い線端により点として表示される。経過時間に応じて透明度を下げ、1〜2秒でフェードアウト完了後にストロークを破棄 |
+| `render()` | `requestAnimationFrame`ループで、各ストロークの記録点を`moveTo`/`lineTo`で結んだ1本のオレンジの線として`lineCap: round`で描画（太さは`calculateRadius`の2倍、Canvas短辺の約1.4%相当）。1点のみのストローク（ドラッグなしのクリック）は始点から始点への長さ0の線分となり、丸い線端により点として表示される。経過時間に応じて透明度を下げ、約1秒（`FADE_DURATION_MS`）でフェードアウト完了後にストロークを破棄 |
 
 ### 2.12 slideListView.js
 
@@ -200,6 +207,9 @@ app.js: get_initial_pdf_path() 呼び出し
           （右クリックメニューから「ファイルを開く」・履歴選択、ウィンドウへのドラッグ＆ドロップが可能）
 
 openFile(path) の内部:
+   slideListView.isActive() を確認 → 真であれば slideListView.hide() でスライド一覧表示モードを終了
+   │
+   ▼
    read_pdf_file(path) でバイナリ取得
    │
    ▼
@@ -214,7 +224,9 @@ openFile(path) の内部:
           │
           ▼
           windowSizer.fitToAspectRatio(aspectRatio)
-          （最大化中なら解除 → 現在の面積を保ってアスペクト比に合わせてリサイズ。失敗してもログのみで継続）
+          （最大化中なら解除 → 現在の面積を保ってアスペクト比に合わせてリサイズ。
+           算出サイズが現在のディスプレイを超える場合はアスペクト比を保ったまま画面に収まる最大サイズにクランプ。
+           失敗してもログのみで継続）
    │
    ▼
    pageNavigator.init(totalPages)
@@ -267,7 +279,7 @@ laserPointer.endStroke()
 requestAnimationFrame ループで透明度を減衰させながら描画
    │
    ▼
-1〜2秒経過後、当該ストロークを破棄（完全に消える）
+約1秒経過後、当該ストロークを破棄（完全に消える）
 ```
 
 ### 3.4 リサイズフロー
@@ -294,10 +306,13 @@ pdfViewer.onResize()
 inputHandler: preventDefault() → fileHistory.getAll()
    │
    ▼
-inputHandler: fullscreen.isFullscreen() で現在の全画面状態を取得
+inputHandler: fullscreen.isFullscreen() で現在の全画面状態、
+              pageNavigator.getTotalPages() > 0 でスライド一覧表示可否（canShowSlideList）、
+              slideListView.isActive() で現在のスライド一覧表示状態を取得
    │
    ▼
-historyMenu.show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen })
+historyMenu.show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen,
+                                   onToggleSlideList, isSlideListActive, canShowSlideList })
    │
    ├─（「ファイルを開く」クリック）→ hide() → onOpenFile() → app.js: openFileViaDialog()
    │        │
@@ -306,10 +321,16 @@ historyMenu.show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen,
    │
    ├─（全画面トグル項目クリック）→ hide() → onToggleFullscreen() → fullscreen.toggle()
    │
-   └─（履歴項目クリック）→ hide() → onSelectEntry(path) → app.js: openFile(path)
+   ├─（スライド一覧表示トグル項目クリック）→ hide() → onToggleSlideList() → toggleSlideListView()（3.8節参照）
+   │
+   └─（履歴項目クリック）→ hide() → onSelectEntry(path) → app.js: openFileFromHistory(path)
 
 openFile(path) 内で fileHistory.add(path) が実行され、
 開いたファイルが最新の履歴に繰り上がる（新規の場合は先頭に追加）
+
+openFileFromHistory(path) は openFile(path) の戻り値が false（失敗）の場合、
+fileHistory.remove(path) を呼び出し、そのエントリを履歴から削除する
+（ファイルが移動・削除されている等で再オープンに失敗した場合の後始末）
 ```
 
 ### 3.6 ドラッグ＆ドロップフロー
@@ -322,10 +343,14 @@ dragDrop: event.payload.type === "drop" を判定
    │
    ├─ "drop"以外（enter/over/leave） → 何もしない
    │
-   └─ "drop" → paths配列の先頭パスのみを対象とする（2件目以降は無視）
+   └─ "drop" → paths配列の先頭パスのみを対象とする（2件目以降は無視。順序はOS/Tauri任せ）
           │
           ▼
-        onDrop(path) → app.js: openFile(path)
+        拡張子が.pdfか判定
+          │
+          ├─ .pdf以外 → 何もしない（onDropを呼び出さない）
+          │
+          └─ .pdf → onDrop(path) → app.js: openFile(path)
 ```
 
 ### 3.7 Escapeキー・全画面フロー
@@ -334,15 +359,20 @@ dragDrop: event.payload.type === "drop" を判定
 keydown（Escape）
    │
    ▼
-inputHandler: slideListView.isActive() を確認
+inputHandler: historyMenu.isOpen() を確認
    │
-   ├─ 真（スライド一覧表示中） → slideListView.hide() でスライド一覧表示を終了（アプリは終了しない）
+   ├─ 真（右クリックメニュー表示中） → historyMenu.hide() でメニューを閉じるのみ
+   │                                   （全画面解除・スライド一覧表示終了・アプリ終了のいずれも行わない）
    │
-   └─ 偽 → fullscreen.isFullscreen() を確認
+   └─ 偽 → slideListView.isActive() を確認
           │
-          ├─ 真（全画面モード中） → fullscreen.exit() で全画面を解除（アプリは終了しない）
+          ├─ 真（スライド一覧表示中） → slideListView.hide() でスライド一覧表示を終了（アプリは終了しない）
           │
-          └─ 偽 → closeWindow() でアプリを終了
+          └─ 偽 → fullscreen.isFullscreen() を確認
+                 │
+                 ├─ 真（全画面モード中） → fullscreen.exit() で全画面を解除（アプリは終了しない）
+                 │
+                 └─ 偽 → closeWindow() でアプリを終了
 ```
 
 ### 3.8 スライド一覧表示フロー
@@ -395,6 +425,14 @@ slideListView.hide() … 通常表示（#viewer）に戻る。直前のシング
 スライド一覧表示中は、矢印キー・スペース・BS・ホイールによるページ送りは無効
 （3.2節参照）。Escapeでの終了は3.7節参照（この場合もカレントページが表示される）。
 右クリックメニューは表示中も引き続き利用可能。
+
+スライド一覧表示中に右クリックメニューから「ファイルを開く」・履歴選択、
+またはドラッグ＆ドロップで新しいPDFを開いた場合（3.1節・3.5節・3.6節の
+openFile(path)を参照）は、slideListView.hide()によりスライド一覧表示
+モードを終了したうえで、開いた新PDFの1ページ目を通常表示する。
+このときのウィンドウリサイズは3.1節のopenFile(path)内のfullscreen.isFullscreen()
+判定に従うため、全画面モード中であればリサイズは行われず全画面モードが
+維持される（スライド一覧表示モードの終了のみが行われる）。
 ```
 
 ## 4. データ設計
@@ -443,7 +481,7 @@ slideListView.hide() … 通常表示（#viewer）に戻る。直前のシング
 | 6 | 境界（先頭） | 1ページ目で後退操作 | ページ番号が変化しない |
 | 7 | 境界（末尾） | 最終ページで前進操作 | ページ番号が変化しない |
 | 8 | 終了 | 通常モード（全画面でない状態）でEscキー押下 | アプリケーションウィンドウが閉じる |
-| 9 | レーザーポインター（クリック） | 左クリックのみ（ドラッグなし）で離す | クリック位置にオレンジの点が表示され、1〜2秒でフェードアウトする |
+| 9 | レーザーポインター（クリック） | 左クリックのみ（ドラッグなし）で離す | クリック位置にオレンジの点が表示され、約1秒でフェードアウトする |
 | 10 | レーザーポインター（ドラッグ） | 左クリック押下したままマウス移動後に離す | 移動の軌跡に沿ってオレンジの線が表示され、フェードアウトする |
 | 11 | レーザーポインター中のページ送り | 左クリック押下中に矢印キーでページ送り | ページが送られ、レーザーポインター表示・モードは継続する |
 | 12 | リサイズ | ウィンドウサイズ変更 | PDFページがアスペクト比を保ったまま再フィット表示される |
@@ -483,3 +521,13 @@ slideListView.hide() … 通常表示（#viewer）に戻る。直前のシング
 | 46 | スライド一覧表示のシングルクリック | スライド一覧表示中に任意のスライドをシングルクリック | そのスライドのタイルがカレントとしてハイライトされ、スライド一覧表示は終了しない |
 | 47 | シングルクリック後のEscでの終了 | スライド一覧表示中に別スライドをシングルクリックしたのちEscキーを押す | ダブルクリックしていなくても、シングルクリックで選択したスライドの通常表示に戻る |
 | 48 | シングルクリック後の再トグルでの終了 | スライド一覧表示中に別スライドをシングルクリックしたのち右クリック→「スライド一覧表示を解除」を選択 | シングルクリックで選択したスライドの通常表示に戻る |
+| 49 | スライド一覧表示中の新規PDFオープン | スライド一覧表示中に右クリックメニューの「ファイルを開く」（または履歴・ドラッグ＆ドロップ）で別のPDFを開く | スライド一覧表示モードが終了し、開いた新PDFの1ページ目が通常表示される |
+| 50 | スライド一覧表示中のレーザーポインター無効化 | スライド一覧表示中にグリッド内タイルを左クリック（押下・移動） | レーザーポインターは表示されず、シングルクリックとしてのタイル選択（ハイライト移動）のみが行われる |
+| 51 | 右クリックメニュー表示中のEsc | 右クリックメニューを表示した状態でEscキーを押す | メニューが閉じるのみで、全画面解除・スライド一覧表示終了・アプリ終了のいずれも発生しない |
+| 52 | 起動引数の相対パス正規化 | カレントディレクトリからの相対パスを引数に指定して起動 | 指定PDFが正しく開かれ、履歴には絶対パスで記録される |
+| 53 | ファイル履歴（大文字小文字違いの扱い） | パスの大文字小文字表記のみが異なる同一ファイルを再度開く | パス文字列が完全一致しないため、履歴には別エントリとして追加される（重複排除されない） |
+| 54 | ファイル履歴（再オープン失敗時の削除） | 履歴にあるファイルを移動・削除したうえで、そのファイルを履歴メニューから開く | エラーメッセージが表示され、そのエントリが履歴から削除される（`history.json`にも反映される） |
+| 55 | ドラッグ＆ドロップ（非PDFファイル） | PDF以外の拡張子のファイルをウィンドウにドラッグ＆ドロップ | 何も開かれず、エラー表示もされない（現在の表示状態が維持される） |
+| 56 | ページごとにアスペクト比が異なるPDF | 1ページ目と2ページ目でアスペクト比が異なるPDFを開き、2ページ目に送る | ウィンドウは1ページ目基準のサイズのまま変化せず、2ページ目はアスペクト比を保ったまま縮小表示され余白が生じる（エラーにはならない） |
+| 57 | PDFオープン時のリサイズ（画面クランプ） | 画面サイズに対して極端に横長・縦長なアスペクト比のPDFを開く | 算出サイズが画面を超える場合、アスペクト比を保ったまま画面に収まる最大サイズにクランプされ、ウィンドウが画面外にはみ出さない |
+| 58 | 全画面解除後のウィンドウサイズ | 全画面モード中に（画面リサイズ前と異なるアスペクト比の）PDFを開いたのち、全画面を解除する | 開いたPDFのアスペクト比に基づくリサイズは行われず、全画面に入る前の通常ウィンドウサイズにそのまま戻る |
