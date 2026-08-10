@@ -68,6 +68,20 @@ describe("loadPdf / renderPage / onResize", () => {
 
     expect(canvas.width).not.toBe(widthBeforeResize);
   });
+
+  it("cancels an in-flight render instead of erroring when renderPage() is called again before it finishes", async () => {
+    const bytes = readFileSync(fixturePath("portrait.pdf"));
+    await loadPdf(new Uint8Array(bytes));
+
+    // Simulates a resize-triggered renderPage() overlapping with an explicit
+    // one, e.g. from openFile()'s windowSizer.fitToAspectRatio() call firing
+    // the window's resize listener while renderPage(1) is still in flight.
+    const first = renderPage(1);
+    const second = renderPage(2);
+
+    await expect(first).resolves.toBeUndefined();
+    await expect(second).resolves.toBeUndefined();
+  });
 });
 
 describe("getPageAspectRatio", () => {

@@ -77,7 +77,7 @@ pv/
 | 関数 | 役割 |
 |---|---|
 | `loadPdf(binaryData)` | pdf.jsで`Uint8Array`からPDFドキュメントを読み込み、総ページ数を返す |
-| `renderPage(pageNumber)` | 指定ページを取得し、ウィンドウサイズに合わせたアスペクト比維持のスケールを計算してCanvasに描画 |
+| `renderPage(pageNumber)` | 指定ページを取得し、ウィンドウサイズに合わせたアスペクト比維持のスケールを計算してCanvasに描画。同一Canvasへの並行`render()`呼び出しによる表示崩れを防ぐため、（1）呼び出し開始時に実行中の`RenderTask`があれば`cancel()`する、（2）`await pdfDocument.getPage()`から戻った直後に世代カウンタで自分がより新しい呼び出しに追い越されていないか確認し、追い越されていればCanvasに触れず`return`する、という二重の防御を持つ |
 | `calculateFitScale(viewport, windowWidth, windowHeight)` | ページのviewportとウィンドウサイズから、アスペクト比を保ちつつウィンドウ内に収まる最大スケールを算出 |
 | `getPageAspectRatio(pageNumber)` | 指定ページ（省略時は1）をscale 1で取得し、幅/高さのアスペクト比を返す。`loadPdf`後にのみ呼び出せる |
 | `onResize()` | ウィンドウリサイズ時に現在ページを再描画 |
@@ -263,7 +263,7 @@ pdfViewer.onResize()
 （レーザーポインターのオーバーレイCanvasもサイズを追従させる）
 ```
 
-`windowSizer.fitToAspectRatio`（3.1参照）による`setSize()`呼び出しもこの`resize`イベントを発生させうるが、`openFile`内で直後に`renderPage(1)`を明示的に呼び出すため、結果として同じページが再描画されるだけで問題は生じない。
+`windowSizer.fitToAspectRatio`（3.1参照）による`setSize()`呼び出しもこの`resize`イベントを発生させうるため、`openFile`内で直後に呼び出す`renderPage(1)`と`onResize()`経由の`renderPage()`が同一Canvasに対してほぼ同時に呼ばれることがある。`pdfViewer.renderPage()`はこの並行呼び出しに対する防御（実行中の`RenderTask`のキャンセルおよび世代カウンタによる古い呼び出しの破棄。詳細は2.3節・[knowledge.md](knowledge.md)を参照）を持つため、表示が乱れることなく最新の呼び出しの結果のみが描画される。
 
 ### 3.5 ファイル履歴選択フロー
 
@@ -395,3 +395,4 @@ inputHandler: fullscreen.isFullscreen() を確認
 | 34 | 全画面中のPDFオープン | 全画面モード中に「ファイルを開く」・履歴・ドラッグ＆ドロップのいずれかでPDFを開く | 全画面モードが維持され、ウィンドウのリサイズ（アスペクト比合わせ）は行われない |
 | 35 | レーザーポインター対象外（右クリックメニュー） | 右クリックでメニューを表示し、メニュー項目を左クリックで選択 | レーザーポインターは表示されず、選択した操作（ファイルを開く／全画面トグル／履歴オープン）のみが行われる |
 | 36 | 右クリックメニューの画面端クランプ | ウィンドウ右端・下端に近い位置で右クリック | メニュー全体が画面内に収まり、右側・下側が切れない |
+| 37 | PDFオープン時の並行描画防御 | `renderPage()`を`await`を挟まず連続で2回呼び出す（PDFオープン時のリサイズによる`resize`イベント発火と、`openFile`内の明示的な描画呼び出しの競合を模擬） | 例外が発生せず両方の呼び出しが正常に完了し、表示が乱れない（上下逆・左右反転等の描画崩れが起きない） |
