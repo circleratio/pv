@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as pageNavigator from "../src/js/pageNavigator.js";
 import * as laserPointer from "../src/js/laserPointer.js";
+import * as fileHistory from "../src/js/fileHistory.js";
+import * as historyMenu from "../src/js/historyMenu.js";
 import { init } from "../src/js/inputHandler.js";
 
 vi.mock("../src/js/pageNavigator.js", () => ({
@@ -14,11 +16,20 @@ vi.mock("../src/js/laserPointer.js", () => ({
   endStroke: vi.fn(),
 }));
 
-function setUp() {
+vi.mock("../src/js/fileHistory.js", () => ({
+  getAll: vi.fn(() => []),
+}));
+
+vi.mock("../src/js/historyMenu.js", () => ({
+  show: vi.fn(),
+}));
+
+function setUp(overrides = {}) {
   const target = new EventTarget();
   const closeWindow = vi.fn();
-  init({ target, closeWindow });
-  return { target, closeWindow };
+  const openHistoryFile = vi.fn();
+  init({ target, closeWindow, openHistoryFile, ...overrides });
+  return { target, closeWindow, openHistoryFile };
 }
 
 describe("inputHandler", () => {
@@ -95,6 +106,32 @@ describe("inputHandler", () => {
     const event = new MouseEvent("contextmenu", { cancelable: true });
     target.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("shows the history menu with the current history on right-click", () => {
+    fileHistory.getAll.mockReturnValue(["a.pdf", "b.pdf"]);
+    const { target } = setUp();
+
+    target.dispatchEvent(
+      new MouseEvent("contextmenu", { clientX: 30, clientY: 40, cancelable: true })
+    );
+
+    expect(historyMenu.show).toHaveBeenCalledWith(
+      30,
+      40,
+      ["a.pdf", "b.pdf"],
+      expect.any(Function)
+    );
+  });
+
+  it("calls openHistoryFile with the selected path from the history menu", () => {
+    const { target, openHistoryFile } = setUp();
+
+    target.dispatchEvent(new MouseEvent("contextmenu", { cancelable: true }));
+    const onSelect = historyMenu.show.mock.calls[0][3];
+    onSelect("picked.pdf");
+
+    expect(openHistoryFile).toHaveBeenCalledWith("picked.pdf");
   });
 
   it("keeps page navigation active while the laser pointer is in use", () => {

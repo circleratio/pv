@@ -1,5 +1,7 @@
 import * as pageNavigator from "./pageNavigator.js";
 import * as laserPointer from "./laserPointer.js";
+import * as fileHistory from "./fileHistory.js";
+import * as historyMenu from "./historyMenu.js";
 
 const NEXT_KEYS = ["ArrowRight", "ArrowDown", " "];
 const PREV_KEYS = ["ArrowLeft", "ArrowUp", "Backspace"];
@@ -7,6 +9,7 @@ const LASER_POINTER_BUTTON = 0; // left mouse button
 
 let isPointerActive = false;
 let closeWindow = defaultCloseWindow;
+let openHistoryFile = () => {};
 
 function defaultCloseWindow() {
   import("@tauri-apps/api/window")
@@ -51,15 +54,27 @@ function handleMouseup(event) {
 
 function handleContextmenu(event) {
   event.preventDefault();
+  const entries = fileHistory.getAll();
+  historyMenu.show(event.clientX, event.clientY, entries, (path) => {
+    openHistoryFile(path);
+  });
 }
 
 /**
- * Wires up keyboard, wheel and left-click (laser pointer) event handling.
- * @param {{ target?: EventTarget, closeWindow?: () => void }} [options]
+ * Wires up keyboard, wheel, left-click (laser pointer) and right-click
+ * (file history menu) event handling.
+ * @param {{ target?: EventTarget, closeWindow?: () => void, openHistoryFile?: (path: string) => void }} [options]
  */
-export function init({ target = window, closeWindow: closeWindowOverride } = {}) {
+export function init({
+  target = window,
+  closeWindow: closeWindowOverride,
+  openHistoryFile: openHistoryFileOverride,
+} = {}) {
   if (closeWindowOverride) {
     closeWindow = closeWindowOverride;
+  }
+  if (openHistoryFileOverride) {
+    openHistoryFile = openHistoryFileOverride;
   }
   target.addEventListener("keydown", handleKeydown);
   target.addEventListener("wheel", handleWheel);

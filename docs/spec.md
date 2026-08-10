@@ -22,12 +22,16 @@ pv/
 │       ├── pdfViewer.js     # pdf.jsラッパー、ページ描画・フィット計算
 │       ├── pageNavigator.js # ページ状態管理・前後移動ロジック
 │       ├── inputHandler.js  # キーボード・マウス・ホイールイベント処理
-│       └── laserPointer.js  # レーザーポインター描画・フェードアウト管理
+│       ├── laserPointer.js  # レーザーポインター描画・フェードアウト管理
+│       ├── fileHistory.js   # ファイル履歴の保持・重複排除・永続化
+│       └── historyMenu.js   # 右クリックで表示する履歴選択メニューのUI
 ├── tests/              # フロントエンド単体テスト（Vitest）
 │   ├── pdfViewer.test.js
 │   ├── pageNavigator.test.js
 │   ├── inputHandler.test.js
 │   ├── laserPointer.test.js
+│   ├── fileHistory.test.js
+│   ├── historyMenu.test.js
 │   └── fixtures/       # テスト用の簡易PDFサンプル（縦長・横長各1点程度）
 ├── package.json
 └── vite.config.js
@@ -44,6 +48,8 @@ pv/
 | `main()` | Tauriアプリ起動。コマンドライン引数（`std::env::args()`）からPDFパスを取得しウィンドウ生成 |
 | Tauriコマンド `get_initial_pdf_path` | 起動時引数で渡されたPDFファイルパスを返す（未指定時は`None`） |
 | Tauriコマンド `read_pdf_file(path: String)` | 指定パスのPDFファイルをバイナリ（`Vec<u8>`）として読み込み返却。存在しない・読み込み失敗時はエラーを返す |
+| Tauriコマンド `load_history()` | アプリデータディレクトリの `history.json` を読み込み、履歴（ファイルパスの配列、最新が先頭）を返す。ファイルが存在しない場合は空配列を返す |
+| Tauriコマンド `save_history(history: Vec<String>)` | 渡された履歴（ファイルパスの配列）で `history.json` を上書き保存する。ディレクトリが存在しない場合は作成する |
 | ファイル選択ダイアログ | `tauri-plugin-dialog` を使用し、PDF未指定時にフロントエンドから呼び出す |
 | ウィンドウ設定 | `tauri.conf.json` にてメニューバーなし・通常ウィンドウ（リサイズ可・最大化可）・タイトルバーありを設定 |
 
@@ -51,8 +57,10 @@ pv/
 
 - アプリ起動時の初期化処理を行うエントリポイント。
 - `get_initial_pdf_path` を呼び出し、パスが得られればPDF読み込みへ、得られなければファイル選択ダイアログを表示。
-- 各モジュール（`pdfViewer` / `pageNavigator` / `inputHandler` / `laserPointer`）を初期化・連携させる。
-- エラーハンドリング: ファイル選択・`read_pdf_file`・`pdfViewer.loadPdf` のいずれかが失敗した場合は、`console.error`にログを出力したうえで画面にエラーメッセージを表示し、以降の初期化処理（`pageNavigator.init`等）は行わない（アプリケーションはクラッシュさせない）。再度のファイル選択などのリトライ導線は設けない。
+- 各モジュール（`pdfViewer` / `pageNavigator` / `inputHandler` / `laserPointer` / `fileHistory` / `historyMenu`）を初期化・連携させる。
+- 起動時に `fileHistory.load()` を呼び出し、保存済み履歴を読み込んでおく。
+- `openFile(path)`: PDFを開く一連の処理（`read_pdf_file` → `pdfViewer.loadPdf` → `pageNavigator.init` → `pdfViewer.renderPage(1)`）を共通関数として提供し、成功時に `fileHistory.add(path)` を呼び出す。起動時・ファイル選択ダイアログ経由・履歴メニュー経由のいずれのPDFオープンもこの関数を通す。
+- エラーハンドリング: ファイル選択・`read_pdf_file`・`pdfViewer.loadPdf` のいずれかが失敗した場合は、`console.error`にログを出力したうえで画面にエラーメッセージを表示し、以降の初期化処理（`pageNavigator.init`等）は行わない（アプリケーションはクラッシュさせない）。再度のファイル選択などのリトライ導線は設けない。失敗した場合は履歴に追加しない。
 
 ### 2.3 pdfViewer.js
 
@@ -84,9 +92,25 @@ pv/
 | `mousedown`（左ボタン） | `laserPointer.startStroke(x, y)`、レーザーポインターモード開始 |
 | `mousemove`（左ボタン押下中） | `laserPointer.addPoint(x, y)` |
 | `mouseup`（左ボタン） | `laserPointer.endStroke()`、レーザーポインターモード終了・フェードアウト開始 |
+| `contextmenu`（右ボタン） | ブラウザ標準コンテキストメニューを`preventDefault()`で抑止したうえで、`fileHistory.getAll()`で履歴一覧を取得し`historyMenu.show(x, y, entries, onSelect)`を表示する。`onSelect`には選択パスで`app.js`の`openFile(path)`を呼び出すコールバックを渡す |
 
 - レーザーポインターモード中も上記のページ送り系イベントは無効化せず、そのまま`pageNavigator`へ委譲する。
-- 右クリックのブラウザ標準コンテキストメニューは`contextmenu`イベントを`preventDefault()`して抑止する（プレゼン用アプリのため常時抑止する。レーザーポインターは左ボタンのため、右クリック自体に機能はない）。
+- 右ボタンには履歴メニュー表示以外の機能を割り当てない。
+
+### 2.7 fileHistory.js
+
+| 関数 | 役割 |
+|---|---|
+| `load()` | Tauriコマンド`load_history`を呼び出し、履歴一覧（最新が先頭の文字列配列）を取得して内部状態に保持する |
+| `add(path)` | 指定パスを履歴に追加する。既に同じパスが履歴内に存在する場合は既存項目を削除してから先頭に追加する（重複排除・最新への繰り上げ）。追加後、件数が10件を超える場合は末尾（最古）を削除して10件に保つ。更新後の履歴でTauriコマンド`save_history`を呼び出し永続化する |
+| `getAll()` | 現在保持している履歴一覧（最新が先頭の文字列配列）を返す |
+
+### 2.8 historyMenu.js
+
+| 関数 | 役割 |
+|---|---|
+| `show(x, y, entries, onSelect)` | 指定座標にファイルパス一覧のポップアップメニューをDOMで表示する。履歴が0件の場合は「履歴なし」を表示し選択不可とする。項目クリック時に`hide()`したうえで`onSelect(path)`を呼び出す |
+| `hide()` | メニューを非表示にして破棄する。メニュー外のクリックや別ページ送り操作でも呼び出される |
 
 ### 2.6 laserPointer.js
 
@@ -107,20 +131,29 @@ pv/
 main.rs: 起動 → コマンドライン引数解析
    │
    ▼
+app.js: fileHistory.load() で保存済み履歴を読み込み
+   │
+   ▼
 app.js: get_initial_pdf_path() 呼び出し
    │
-   ├─ パスあり → read_pdf_file(path) でバイナリ取得
+   ├─ パスあり → openFile(path)
    │
-   └─ パスなし → ファイル選択ダイアログ表示 → 選択されたパスで read_pdf_file(path)
-   │
-   ▼
-pdfViewer.loadPdf(binaryData) → 総ページ数取得
-   │
-   ▼
-pageNavigator.init(totalPages)
+   └─ パスなし → ファイル選択ダイアログ表示 → 選択されたパスで openFile(path)
+
+openFile(path) の内部:
+   read_pdf_file(path) でバイナリ取得
    │
    ▼
-pdfViewer.renderPage(1) … 1ページ目を表示
+   pdfViewer.loadPdf(binaryData) → 総ページ数取得
+   │
+   ▼
+   pageNavigator.init(totalPages)
+   │
+   ▼
+   pdfViewer.renderPage(1) … 1ページ目を表示
+   │
+   ▼
+   fileHistory.add(path) → save_history で永続化
 ```
 
 ### 3.2 ページ送りフロー
@@ -176,6 +209,25 @@ pdfViewer.onResize()
 （レーザーポインターのオーバーレイCanvasもサイズを追従させる）
 ```
 
+### 3.5 ファイル履歴選択フロー
+
+```
+右ボタン contextmenu
+   │
+   ▼
+inputHandler: preventDefault() → fileHistory.getAll()
+   │
+   ▼
+historyMenu.show(x, y, entries, onSelect)
+   │
+   ▼（項目クリック）
+historyMenu.hide() → onSelect(path) → app.js: openFile(path)
+   │
+   ▼
+openFile(path) 内で fileHistory.add(path) が実行され、
+選択したファイルが最新の履歴に繰り上がる
+```
+
 ## 4. データ設計
 
 ### 4.1 AppState（app.js内で保持）
@@ -202,6 +254,14 @@ pdfViewer.onResize()
 | `points` | `{x: number, y: number}[]` | クリック・ドラッグで記録した座標列（クリックのみの場合は要素数1） |
 | `endedAt` | number（timestamp）\| null | `endStroke()`が呼ばれた時刻。フェードアウト計算の起点。押下中は`null` |
 
+### 4.3 HistoryState（fileHistory.js内で保持）
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `entries` | `string[]` | 履歴として保持しているPDFファイルの絶対パス一覧（先頭が最新、最大10件） |
+
+永続化データ（`history.json`、アプリデータディレクトリ配下）は`entries`と同一形式（ファイルパスの配列、最新が先頭、最大10件）のJSONとする。
+
 ## 5. テスト設計
 
 | # | 観点 | テストケース | 期待結果 |
@@ -219,3 +279,10 @@ pdfViewer.onResize()
 | 11 | レーザーポインター中のページ送り | 左クリック押下中に矢印キーでページ送り | ページが送られ、レーザーポインター表示・モードは継続する |
 | 12 | リサイズ | ウィンドウサイズ変更 | PDFページがアスペクト比を保ったまま再フィット表示される |
 | 13 | フィット表示 | 縦長／横長それぞれのPDFを表示 | いずれもウィンドウ内に収まり、はみ出しや不要な余白の偏りがない |
+| 14 | ファイル履歴（新規記録） | 未履歴のPDFファイルを開く | 履歴の先頭に追加され、`history.json`に永続化される |
+| 15 | ファイル履歴（重複オープン） | 履歴に既にあるファイルを再度開く | 履歴が重複せず、そのファイルの履歴が最新（先頭）に繰り上がる |
+| 16 | ファイル履歴（上限） | 履歴が10件ある状態で11個目の別ファイルを開く | 最も古い履歴が削除され、件数が10件に維持される |
+| 17 | ファイル履歴（右クリック表示） | 履歴が1件以上ある状態で右クリック | 履歴一覧のメニューが表示され、標準コンテキストメニューは表示されない |
+| 18 | ファイル履歴（選択オープン） | 履歴メニューから項目を選択 | 選択したファイルが開かれ、メニューが閉じる |
+| 19 | ファイル履歴（空） | 履歴が0件の状態で右クリック | 「履歴なし」等が表示され、選択可能な項目はない |
+| 20 | ファイル履歴（永続化） | PDFファイルを開いた後アプリを再起動 | 再起動後も履歴が保持されている |
