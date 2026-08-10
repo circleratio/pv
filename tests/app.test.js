@@ -6,6 +6,7 @@ import * as pageNavigator from "../src/js/pageNavigator.js";
 import * as inputHandler from "../src/js/inputHandler.js";
 import * as fileHistory from "../src/js/fileHistory.js";
 import * as windowSizer from "../src/js/windowSizer.js";
+import * as dragDrop from "../src/js/dragDrop.js";
 import { start, openFile, openFileViaDialog } from "../src/js/app.js";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -24,6 +25,9 @@ vi.mock("../src/js/fileHistory.js", () => ({
 }));
 vi.mock("../src/js/windowSizer.js", () => ({
   fitToAspectRatio: vi.fn(),
+}));
+vi.mock("../src/js/dragDrop.js", () => ({
+  init: vi.fn(),
 }));
 
 describe("app.start", () => {
@@ -52,6 +56,7 @@ describe("app.start", () => {
       openHistoryFile: openFile,
       openFileDialog: openFileViaDialog,
     });
+    expect(dragDrop.init).toHaveBeenCalledWith({ onDrop: openFile });
     expect(fileHistory.load).toHaveBeenCalledTimes(1);
     expect(fileHistory.add).toHaveBeenCalledWith("foo.pdf");
   });
@@ -72,6 +77,7 @@ describe("app.start", () => {
       openHistoryFile: openFile,
       openFileDialog: openFileViaDialog,
     });
+    expect(dragDrop.init).toHaveBeenCalledWith({ onDrop: openFile });
   });
 
   it("shows an error and does not proceed when the file fails to read", async () => {
@@ -85,6 +91,7 @@ describe("app.start", () => {
 
     expect(pdfViewer.loadPdf).not.toHaveBeenCalled();
     expect(inputHandler.init).not.toHaveBeenCalled();
+    expect(dragDrop.init).not.toHaveBeenCalled();
     expect(document.getElementById("viewer").textContent).not.toBe("");
     expect(fileHistory.add).not.toHaveBeenCalled();
   });

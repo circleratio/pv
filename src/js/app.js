@@ -5,6 +5,7 @@ import * as pageNavigator from "./pageNavigator.js";
 import * as inputHandler from "./inputHandler.js";
 import * as fileHistory from "./fileHistory.js";
 import * as windowSizer from "./windowSizer.js";
+import * as dragDrop from "./dragDrop.js";
 
 function showError(message) {
   const viewer = document.getElementById("viewer");
@@ -87,6 +88,7 @@ export async function start() {
   }
 
   inputHandler.init({ openHistoryFile: openFile, openFileDialog: openFileViaDialog });
+  await dragDrop.init({ onDrop: openFile });
   window.addEventListener("resize", () => pdfViewer.onResize());
 }
 

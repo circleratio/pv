@@ -146,9 +146,29 @@
 - **テスト**（Vitest。`pdfViewer`/`windowSizer`をモック）: `openFile`成功時に`getPageAspectRatio`の結果で`fitToAspectRatio`が呼ばれること／`fitToAspectRatio`が失敗してもPDFの表示・履歴への追加が継続すること。
 - **完了条件**: 該当テストgreen。
 
-## Step 20: 結合・シナリオ確認
+## Step 20: リサイズ機能統合の完了
 
 - 依存: Step 16, Step 19
-- 全モジュールを結合したアプリケーションに対して、spec.md 5章「テスト設計」の26項目（起動、ページ送り、境界、終了、レーザーポインター、リサイズ、フィット表示、ファイル履歴、空白ウィンドウからのオープン、PDFオープン時のウィンドウリサイズ）を手動シナリオとして実施する。
+- Step 19までのウィンドウリサイズ機能統合を完了した状態。以降のドラッグ＆ドロップ機能（Step 21〜22）はこの状態を土台に追加する。
+
+## Step 21: dragDrop.js
+
+- 依存: Step 0
+- `init({ onDrop })`：`@tauri-apps/api/window` の `getCurrentWindow().onDragDropEvent()` でOSレベルのファイルドラッグ＆ドロップを監視する非同期関数を実装する。イベントの `payload.type` が `"drop"` の場合、`payload.paths` 配列の先頭要素のみを対象に `onDrop(path)` を呼び出す（2件目以降は無視）。`"drop"` 以外（`enter`/`over`/`leave`）では何もしない。
+- Tauriのデフォルト設定でOSレベルドラッグ＆ドロップは有効、かつイベント購読は `core:default`（`core:event:default`）で許可済みのため、`tauri.conf.json`・`capabilities/default.json` の変更は不要。
+- **テスト**（Vitest。`@tauri-apps/api/window`をモックし、登録したハンドラを直接呼び出して検証）: `type: "drop"`でpathsの先頭パスのみを渡して`onDrop`が呼ばれること／pathsが複数件でも`onDrop`は1回だけ呼ばれること／`type`が`"enter"`/`"over"`/`"leave"`の場合は`onDrop`が呼ばれないこと。
+- **完了条件**: 該当テストgreen。
+
+## Step 22: app.js - `dragDrop` の統合
+
+- 依存: Step 15, Step 21
+- `start()` 内で、`inputHandler.init()` と同様にPDFの読み込み結果に関わらず必ず `dragDrop.init({ onDrop: openFile })` を呼び出すようにする（起動時にPDFを読み込めた場合・空白のウィンドウの場合のいずれも）。引数指定のPDFオープンが失敗した場合は、既存のエラーハンドリング方針に合わせて `dragDrop.init()` も呼び出さない。
+- **テスト**（Vitest。`dragDrop`をモック）: 起動時（引数あり成功時・引数なし時）に`dragDrop.init`が`{ onDrop: openFile }`で呼ばれること／引数ありで`openFile`が失敗した場合は`dragDrop.init`が呼ばれないこと。
+- **完了条件**: 該当テストgreen。
+
+## Step 23: 結合・シナリオ確認
+
+- 依存: Step 20, Step 22
+- 全モジュールを結合したアプリケーションに対して、spec.md 5章「テスト設計」の29項目（起動、ページ送り、境界、終了、レーザーポインター、リサイズ、フィット表示、ファイル履歴、空白ウィンドウからのオープン、PDFオープン時のウィンドウリサイズ、ドラッグ＆ドロップ）を手動シナリオとして実施する。
 - 併せて `npm test` / `cargo test` を通しで実行し、これまでの自動テストがすべてgreenであることを確認する。
-- **完了条件**: 自動テストが全てgreen、かつspec.md 5章の26項目すべてが合格する。
+- **完了条件**: 自動テストが全てgreen、かつspec.md 5章の29項目すべてが合格する。

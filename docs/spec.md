@@ -25,7 +25,8 @@ pv/
 │       ├── laserPointer.js  # レーザーポインター描画・フェードアウト管理
 │       ├── fileHistory.js   # ファイル履歴の保持・重複排除・永続化
 │       ├── historyMenu.js   # 右クリックで表示する履歴選択メニューのUI
-│       └── windowSizer.js   # PDFのアスペクト比に合わせたウィンドウリサイズ
+│       ├── windowSizer.js   # PDFのアスペクト比に合わせたウィンドウリサイズ
+│       └── dragDrop.js      # ウィンドウへのファイルドラッグ＆ドロップ処理
 ├── tests/              # フロントエンド単体テスト（Vitest）
 │   ├── pdfViewer.test.js
 │   ├── pageNavigator.test.js
@@ -34,6 +35,7 @@ pv/
 │   ├── fileHistory.test.js
 │   ├── historyMenu.test.js
 │   ├── windowSizer.test.js
+│   ├── dragDrop.test.js
 │   └── fixtures/       # テスト用の簡易PDFサンプル（縦長・横長各1点程度）
 ├── package.json
 └── vite.config.js
@@ -59,9 +61,9 @@ pv/
 
 - アプリ起動時の初期化処理を行うエントリポイント。
 - `get_initial_pdf_path` を呼び出し、パスが得られればそのPDFを読み込む。パスが得られない場合はPDFを読み込まず、空白のウィンドウのまま初期化を完了する（ファイル選択ダイアログは自動表示しない）。
-- 各モジュール（`pdfViewer` / `pageNavigator` / `inputHandler` / `laserPointer` / `fileHistory` / `historyMenu` / `windowSizer`）を初期化・連携させる。`inputHandler.init()` は起動時にPDFを読み込めたかどうかに関わらず必ず実行し、右クリックメニュー（「ファイルを開く」・履歴）を常に利用可能にする。
+- 各モジュール（`pdfViewer` / `pageNavigator` / `inputHandler` / `laserPointer` / `fileHistory` / `historyMenu` / `windowSizer` / `dragDrop`）を初期化・連携させる。`inputHandler.init()` は起動時にPDFを読み込めたかどうかに関わらず必ず実行し、右クリックメニュー（「ファイルを開く」・履歴）を常に利用可能にする。`dragDrop.init({ onDrop: openFile })` も同様にPDFの読み込み結果に関わらず必ず実行し、ドラッグ＆ドロップでのファイルオープンを常に利用可能にする。
 - 起動時に `fileHistory.load()` を呼び出し、保存済み履歴を読み込んでおく。
-- `openFile(path)`: PDFを開く一連の処理（`read_pdf_file` → `pdfViewer.loadPdf` → `pdfViewer.getPageAspectRatio(1)` → `windowSizer.fitToAspectRatio(aspectRatio)` → `pageNavigator.init` → `pdfViewer.renderPage(1)`）を共通関数として提供し、成功時に `fileHistory.add(path)` を呼び出す。起動時（引数指定時）・「ファイルを開く」ダイアログ経由・履歴メニュー経由のいずれのPDFオープンもこの関数を通す。`windowSizer.fitToAspectRatio` が失敗しても`console.error`にログを出力するのみで処理は継続する（ウィンドウリサイズはPDF表示に必須ではないため）。
+- `openFile(path)`: PDFを開く一連の処理（`read_pdf_file` → `pdfViewer.loadPdf` → `pdfViewer.getPageAspectRatio(1)` → `windowSizer.fitToAspectRatio(aspectRatio)` → `pageNavigator.init` → `pdfViewer.renderPage(1)`）を共通関数として提供し、成功時に `fileHistory.add(path)` を呼び出す。起動時（引数指定時）・「ファイルを開く」ダイアログ経由・履歴メニュー経由・ドラッグ＆ドロップ経由のいずれのPDFオープンもこの関数を通す。`windowSizer.fitToAspectRatio` が失敗しても`console.error`にログを出力するのみで処理は継続する（ウィンドウリサイズはPDF表示に必須ではないため）。
 - `openFileViaDialog()`: `tauri-plugin-dialog` の `open()` でファイル選択ダイアログを表示し、選択された場合のみ `openFile(path)` を呼び出す。ダイアログがキャンセルされた場合（`open()` が `null` を返す場合）は何もしない。`inputHandler` の右クリックメニューの「ファイルを開く」から呼び出される。
 - エラーハンドリング:
   - 起動時に引数でPDFパスが指定されており、その `openFile(path)` が失敗（`read_pdf_file`・`pdfViewer.loadPdf` のいずれかが失敗）した場合は、`console.error`にログを出力したうえで画面にエラーメッセージを表示し、`inputHandler.init()` を含む以降の初期化処理は行わない（アプリケーションはクラッシュさせない。再度のファイル選択などのリトライ導線は設けない）。
@@ -128,6 +130,14 @@ pv/
 
 Tauriの権限設定（`src-tauri/capabilities/default.json`）に、ウィンドウリサイズに必要な `core:window:allow-inner-size` / `core:window:allow-is-maximized` / `core:window:allow-set-size` / `core:window:allow-unmaximize` を追加する。
 
+### 2.10 dragDrop.js
+
+| 関数 | 役割 |
+|---|---|
+| `init({ onDrop })` | Tauriの`@tauri-apps/api/window`（`getCurrentWindow`）の`onDragDropEvent`でOSレベルのファイルドラッグ＆ドロップを監視する非同期関数。イベントの`type`が`"drop"`の場合、`paths`配列の先頭要素（1件目）のみを対象に`onDrop(path)`を呼び出す（複数ファイルが同時にドロップされた場合、2件目以降は無視する）。`type`が`"drop"`以外（`enter`/`over`/`leave`）の場合は何もしない |
+
+Tauriのデフォルト設定では、ウィンドウのOSレベルドラッグ＆ドロップ（`dragDropEnabled`）は有効になっており、`tauri.conf.json`の変更は不要。イベント購読自体は `core:default`（`core:event:default`に含まれる`allow-listen`）で許可されるため、`capabilities/default.json`への追加権限も不要。
+
 ### 2.6 laserPointer.js
 
 | 要素 | 役割 |
@@ -153,11 +163,11 @@ app.js: fileHistory.load() で保存済み履歴を読み込み
 app.js: get_initial_pdf_path() 呼び出し
    │
    ├─ パスあり → openFile(path) 実行
-   │      ├─ 成功 → inputHandler.init() → 1ページ目が表示された状態で操作可能に
-   │      └─ 失敗 → エラーメッセージ表示、以降の初期化（inputHandler.init()含む）は行わない
+   │      ├─ 成功 → inputHandler.init() → dragDrop.init() → 1ページ目が表示された状態で操作可能に
+   │      └─ 失敗 → エラーメッセージ表示、以降の初期化（inputHandler.init()・dragDrop.init()含む）は行わない
    │
-   └─ パスなし → PDFを読み込まず、空白のウィンドウのまま inputHandler.init() を実行
-          （右クリックメニューから「ファイルを開く」・履歴選択が可能）
+   └─ パスなし → PDFを読み込まず、空白のウィンドウのまま inputHandler.init() → dragDrop.init() を実行
+          （右クリックメニューから「ファイルを開く」・履歴選択、ウィンドウへのドラッグ＆ドロップが可能）
 
 openFile(path) の内部:
    read_pdf_file(path) でバイナリ取得
@@ -259,6 +269,22 @@ openFile(path) 内で fileHistory.add(path) が実行され、
 開いたファイルが最新の履歴に繰り上がる（新規の場合は先頭に追加）
 ```
 
+### 3.6 ドラッグ＆ドロップフロー
+
+```
+OSレベルのファイルドロップ（tauri:// drag-drop イベント）
+   │
+   ▼
+dragDrop: event.payload.type === "drop" を判定
+   │
+   ├─ "drop"以外（enter/over/leave） → 何もしない
+   │
+   └─ "drop" → paths配列の先頭パスのみを対象とする（2件目以降は無視）
+          │
+          ▼
+        onDrop(path) → app.js: openFile(path)
+```
+
 ## 4. データ設計
 
 ### 4.1 AppState（app.js内で保持）
@@ -323,3 +349,6 @@ openFile(path) 内で fileHistory.add(path) が実行され、
 | 24 | PDFオープン時のリサイズ（横長） | 通常ウィンドウの状態で横長PDFを開く | ウィンドウが横長PDFのアスペクト比に合わせてリサイズされ、表示に余白がほぼできない |
 | 25 | PDFオープン時のリサイズ（最大化中） | ウィンドウを最大化した状態でPDFを開く | 最大化が解除され、アスペクト比に合わせたウィンドウサイズになる |
 | 26 | PDFオープン時のリサイズ（面積維持） | 任意のウィンドウサイズでPDFを開く | リサイズ後のウィンドウ面積が、リサイズ前とおおむね同じになる |
+| 27 | ドラッグ＆ドロップ（単一ファイル） | PDFファイル1件をウィンドウにドラッグ＆ドロップ | そのPDFが開かれ、1ページ目が表示され、履歴に記録される |
+| 28 | ドラッグ＆ドロップ（複数ファイル） | PDFファイル複数件を同時にウィンドウにドラッグ＆ドロップ | 先頭の1件のみが開かれる |
+| 29 | ドラッグ＆ドロップ（空白ウィンドウ） | 引数なしで起動した空白のウィンドウにPDFファイルをドラッグ＆ドロップ | そのPDFが開かれる |
