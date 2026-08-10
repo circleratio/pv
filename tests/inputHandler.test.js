@@ -28,8 +28,9 @@ function setUp(overrides = {}) {
   const target = new EventTarget();
   const closeWindow = vi.fn();
   const openHistoryFile = vi.fn();
-  init({ target, closeWindow, openHistoryFile, ...overrides });
-  return { target, closeWindow, openHistoryFile };
+  const openFileDialog = vi.fn();
+  init({ target, closeWindow, openHistoryFile, openFileDialog, ...overrides });
+  return { target, closeWindow, openHistoryFile, openFileDialog };
 }
 
 describe("inputHandler", () => {
@@ -120,7 +121,7 @@ describe("inputHandler", () => {
       30,
       40,
       ["a.pdf", "b.pdf"],
-      expect.any(Function)
+      { onSelectEntry: expect.any(Function), onOpenFile: expect.any(Function) }
     );
   });
 
@@ -128,10 +129,20 @@ describe("inputHandler", () => {
     const { target, openHistoryFile } = setUp();
 
     target.dispatchEvent(new MouseEvent("contextmenu", { cancelable: true }));
-    const onSelect = historyMenu.show.mock.calls[0][3];
-    onSelect("picked.pdf");
+    const { onSelectEntry } = historyMenu.show.mock.calls[0][3];
+    onSelectEntry("picked.pdf");
 
     expect(openHistoryFile).toHaveBeenCalledWith("picked.pdf");
+  });
+
+  it("calls openFileDialog when the history menu's 'open file' item is chosen", () => {
+    const { target, openFileDialog } = setUp();
+
+    target.dispatchEvent(new MouseEvent("contextmenu", { cancelable: true }));
+    const { onOpenFile } = historyMenu.show.mock.calls[0][3];
+    onOpenFile();
+
+    expect(openFileDialog).toHaveBeenCalledTimes(1);
   });
 
   it("keeps page navigation active while the laser pointer is in use", () => {

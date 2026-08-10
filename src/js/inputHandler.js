@@ -10,6 +10,7 @@ const LASER_POINTER_BUTTON = 0; // left mouse button
 let isPointerActive = false;
 let closeWindow = defaultCloseWindow;
 let openHistoryFile = () => {};
+let openFileDialog = () => {};
 
 function defaultCloseWindow() {
   import("@tauri-apps/api/window")
@@ -55,26 +56,31 @@ function handleMouseup(event) {
 function handleContextmenu(event) {
   event.preventDefault();
   const entries = fileHistory.getAll();
-  historyMenu.show(event.clientX, event.clientY, entries, (path) => {
-    openHistoryFile(path);
+  historyMenu.show(event.clientX, event.clientY, entries, {
+    onSelectEntry: (path) => openHistoryFile(path),
+    onOpenFile: () => openFileDialog(),
   });
 }
 
 /**
  * Wires up keyboard, wheel, left-click (laser pointer) and right-click
  * (file history menu) event handling.
- * @param {{ target?: EventTarget, closeWindow?: () => void, openHistoryFile?: (path: string) => void }} [options]
+ * @param {{ target?: EventTarget, closeWindow?: () => void, openHistoryFile?: (path: string) => void, openFileDialog?: () => void }} [options]
  */
 export function init({
   target = window,
   closeWindow: closeWindowOverride,
   openHistoryFile: openHistoryFileOverride,
+  openFileDialog: openFileDialogOverride,
 } = {}) {
   if (closeWindowOverride) {
     closeWindow = closeWindowOverride;
   }
   if (openHistoryFileOverride) {
     openHistoryFile = openHistoryFileOverride;
+  }
+  if (openFileDialogOverride) {
+    openFileDialog = openFileDialogOverride;
   }
   target.addEventListener("keydown", handleKeydown);
   target.addEventListener("wheel", handleWheel);

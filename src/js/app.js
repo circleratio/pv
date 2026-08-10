@@ -5,12 +5,6 @@ import * as pageNavigator from "./pageNavigator.js";
 import * as inputHandler from "./inputHandler.js";
 import * as fileHistory from "./fileHistory.js";
 
-async function resolvePdfPath() {
-  const initialPath = await invoke("get_initial_pdf_path");
-  if (initialPath) return initialPath;
-  return open({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
-}
-
 function showError(message) {
   const viewer = document.getElementById("viewer");
   if (viewer) {
@@ -53,27 +47,38 @@ export async function openFile(path) {
   return true;
 }
 
+/**
+ * Shows the file selection dialog and opens the chosen PDF, if any.
+ * Does nothing if the dialog is cancelled. Invoked from the right-click
+ * history menu's "open file" item.
+ */
+export async function openFileViaDialog() {
+  let path;
+  try {
+    path = await open({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
+  } catch (error) {
+    console.error("Failed to open file dialog", error);
+    return;
+  }
+
+  if (!path) return;
+  await openFile(path);
+}
+
 export async function start() {
   await fileHistory.load();
 
-  let path;
-  try {
-    path = await resolvePdfPath();
-  } catch (error) {
-    console.error("Failed to resolve PDF path", error);
-    showError("PDFファイルの選択に失敗しました。");
-    return;
+  const initialPath = await invoke("get_initial_pdf_path").catch((error) => {
+    console.error("Failed to resolve initial PDF path", error);
+    return null;
+  });
+
+  if (initialPath) {
+    const opened = await openFile(initialPath);
+    if (!opened) return;
   }
 
-  if (!path) {
-    showError("PDFファイルが選択されませんでした。");
-    return;
-  }
-
-  const opened = await openFile(path);
-  if (!opened) return;
-
-  inputHandler.init({ openHistoryFile: openFile });
+  inputHandler.init({ openHistoryFile: openFile, openFileDialog: openFileViaDialog });
   window.addEventListener("resize", () => pdfViewer.onResize());
 }
 

@@ -15,14 +15,14 @@ function removeMenu() {
 }
 
 /**
- * Shows a popup menu listing the file history at the given viewport position.
- * Selecting an entry hides the menu and calls `onSelect` with its path.
+ * Shows a popup menu at the given viewport position: an always-present
+ * "open file" item followed by the file history.
  * @param {number} x
  * @param {number} y
  * @param {string[]} entries file paths, newest first
- * @param {(path: string) => void} onSelect
+ * @param {{ onSelectEntry: (path: string) => void, onOpenFile: () => void }} callbacks
  */
-export function show(x, y, entries, onSelect) {
+export function show(x, y, entries, { onSelectEntry, onOpenFile }) {
   hide();
 
   const menu = document.createElement("ul");
@@ -30,6 +30,15 @@ export function show(x, y, entries, onSelect) {
   menu.className = "history-menu";
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
+
+  const openFileItem = document.createElement("li");
+  openFileItem.className = "history-menu-item history-menu-open-item";
+  openFileItem.textContent = "ファイルを開く";
+  openFileItem.addEventListener("click", () => {
+    hide();
+    onOpenFile();
+  });
+  menu.appendChild(openFileItem);
 
   if (entries.length === 0) {
     const empty = document.createElement("li");
@@ -43,7 +52,7 @@ export function show(x, y, entries, onSelect) {
       item.textContent = path;
       item.addEventListener("click", () => {
         hide();
-        onSelect(path);
+        onSelectEntry(path);
       });
       menu.appendChild(item);
     }
