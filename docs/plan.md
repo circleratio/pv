@@ -118,9 +118,37 @@
 - **テスト**（Vitest。Tauriの`invoke`/ダイアログ呼び出しをモック）: 起動時に `fileHistory.load()` が呼ばれること／`openFile` 成功時に `fileHistory.add(path)` が呼ばれること／`read_pdf_file` 等が失敗した場合は `fileHistory.add(path)` が呼ばれないこと（既存のエラーハンドリングは維持される）／`openFileViaDialog()` がダイアログで選択されたパスで `openFile` を呼ぶこと／ダイアログがキャンセルされた場合は `openFile` が呼ばれないこと。
 - **完了条件**: 該当テストgreen。
 
-## Step 16: 結合・シナリオ確認
+## Step 16: 起動・履歴機能統合の完了
 
 - 依存: Step 10, Step 15
-- 全モジュールを結合したアプリケーションに対して、spec.md 5章「テスト設計」の22項目（起動、ページ送り、境界、終了、レーザーポインター、リサイズ、フィット表示、ファイル履歴、空白ウィンドウからのオープン）を手動シナリオとして実施する。
+- Step 15までのファイル履歴機能統合を完了した状態。以降のウィンドウリサイズ機能（Step 17〜19）はこの状態を土台に追加する。
+
+## Step 17: pdfViewer.js - `getPageAspectRatio`
+
+- 依存: Step 6
+- 指定ページ番号（省略時は1）をscale 1で取得し、幅/高さのアスペクト比を返す `getPageAspectRatio(pageNumber)` を実装する。`loadPdf`未実行時に呼び出された場合は例外を投げる。
+- **テスト**（Vitest。`tests/fixtures/`の縦長・横長サンプルPDFを使用）: 縦長PDFで1未満の値、横長PDFで1超の値が返ること／`loadPdf`前に呼び出すと例外になること。
+- **完了条件**: 該当テストgreen。
+
+## Step 18: windowSizer.js
+
+- 依存: Step 0
+- `calculateSize(currentWidth, currentHeight, aspectRatio)`：現在の幅・高さから面積を算出し、その面積をなるべく保ちつつ指定アスペクト比となる幅・高さを算出する純粋関数を実装する。
+- `fitToAspectRatio(aspectRatio)`：`@tauri-apps/api/window` の `getCurrentWindow()` を用い、最大化中なら `unmaximize()` を呼んだうえで `innerSize()` と `calculateSize` から求めた新サイズを `setSize()` で適用する非同期関数を実装する。
+- `src-tauri/capabilities/default.json` の `permissions` に `core:window:allow-inner-size` / `core:window:allow-is-maximized` / `core:window:allow-set-size` / `core:window:allow-unmaximize` を追加する。
+- **テスト**（Vitest。`calculateSize`は純粋関数として直接テスト。`fitToAspectRatio`は`@tauri-apps/api/window`をモック）: `calculateSize`が面積をほぼ保ちつつ指定アスペクト比になる幅・高さを返すこと／`fitToAspectRatio`が最大化中に`unmaximize()`を呼んでから`setSize()`を呼ぶこと／最大化していない場合は`unmaximize()`を呼ばないこと。
+- **完了条件**: 該当テストgreen。
+
+## Step 19: app.js - `openFile` へのリサイズ統合
+
+- 依存: Step 15, Step 17, Step 18
+- `openFile(path)` 内で、`pdfViewer.loadPdf` の後・`pageNavigator.init` の前に `pdfViewer.getPageAspectRatio(1)` → `windowSizer.fitToAspectRatio(aspectRatio)` を呼び出すようにする。`fitToAspectRatio` が失敗しても `console.error` でログを出力するのみとし、PDF表示処理は継続する（エラー表示・履歴記録の抑止は行わない）。
+- **テスト**（Vitest。`pdfViewer`/`windowSizer`をモック）: `openFile`成功時に`getPageAspectRatio`の結果で`fitToAspectRatio`が呼ばれること／`fitToAspectRatio`が失敗してもPDFの表示・履歴への追加が継続すること。
+- **完了条件**: 該当テストgreen。
+
+## Step 20: 結合・シナリオ確認
+
+- 依存: Step 16, Step 19
+- 全モジュールを結合したアプリケーションに対して、spec.md 5章「テスト設計」の26項目（起動、ページ送り、境界、終了、レーザーポインター、リサイズ、フィット表示、ファイル履歴、空白ウィンドウからのオープン、PDFオープン時のウィンドウリサイズ）を手動シナリオとして実施する。
 - 併せて `npm test` / `cargo test` を通しで実行し、これまでの自動テストがすべてgreenであることを確認する。
-- **完了条件**: 自動テストが全てgreen、かつspec.md 5章の22項目すべてが合格する。
+- **完了条件**: 自動テストが全てgreen、かつspec.md 5章の26項目すべてが合格する。

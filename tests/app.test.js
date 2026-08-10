@@ -5,6 +5,7 @@ import * as pdfViewer from "../src/js/pdfViewer.js";
 import * as pageNavigator from "../src/js/pageNavigator.js";
 import * as inputHandler from "../src/js/inputHandler.js";
 import * as fileHistory from "../src/js/fileHistory.js";
+import * as windowSizer from "../src/js/windowSizer.js";
 import { start, openFile, openFileViaDialog } from "../src/js/app.js";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -13,6 +14,7 @@ vi.mock("../src/js/pdfViewer.js", () => ({
   loadPdf: vi.fn(),
   renderPage: vi.fn(),
   onResize: vi.fn(),
+  getPageAspectRatio: vi.fn(),
 }));
 vi.mock("../src/js/pageNavigator.js", () => ({ init: vi.fn() }));
 vi.mock("../src/js/inputHandler.js", () => ({ init: vi.fn() }));
@@ -20,12 +22,16 @@ vi.mock("../src/js/fileHistory.js", () => ({
   load: vi.fn(),
   add: vi.fn(),
 }));
+vi.mock("../src/js/windowSizer.js", () => ({
+  fitToAspectRatio: vi.fn(),
+}));
 
 describe("app.start", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     document.body.innerHTML = `<div id="viewer"><canvas id="pdf-canvas"></canvas></div>`;
     pdfViewer.loadPdf.mockResolvedValue(3);
+    windowSizer.fitToAspectRatio.mockResolvedValue(undefined);
   });
 
   it("shows the PDF and wires up inputHandler when a path argument was given", async () => {
@@ -101,6 +107,28 @@ describe("app.openFile", () => {
     vi.clearAllMocks();
     document.body.innerHTML = `<div id="viewer"><canvas id="pdf-canvas"></canvas></div>`;
     pdfViewer.loadPdf.mockResolvedValue(3);
+    windowSizer.fitToAspectRatio.mockResolvedValue(undefined);
+  });
+
+  it("resizes the window to the PDF's aspect ratio before rendering", async () => {
+    invoke.mockResolvedValue(new Uint8Array([1, 2, 3]));
+    pdfViewer.getPageAspectRatio.mockResolvedValue(1.5);
+
+    await openFile("resized.pdf");
+
+    expect(pdfViewer.getPageAspectRatio).toHaveBeenCalledWith(1);
+    expect(windowSizer.fitToAspectRatio).toHaveBeenCalledWith(1.5);
+  });
+
+  it("still shows the PDF and records it in history when resizing fails", async () => {
+    invoke.mockResolvedValue(new Uint8Array([1, 2, 3]));
+    windowSizer.fitToAspectRatio.mockRejectedValue(new Error("resize failed"));
+
+    const result = await openFile("resized.pdf");
+
+    expect(result).toBe(true);
+    expect(pdfViewer.renderPage).toHaveBeenCalledWith(1);
+    expect(fileHistory.add).toHaveBeenCalledWith("resized.pdf");
   });
 
   it("records the file in the history once it has been opened successfully", async () => {
@@ -137,6 +165,7 @@ describe("app.openFileViaDialog", () => {
     vi.clearAllMocks();
     document.body.innerHTML = `<div id="viewer"><canvas id="pdf-canvas"></canvas></div>`;
     pdfViewer.loadPdf.mockResolvedValue(3);
+    windowSizer.fitToAspectRatio.mockResolvedValue(undefined);
   });
 
   it("opens the file chosen in the dialog", async () => {

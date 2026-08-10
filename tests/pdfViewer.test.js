@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   calculateFitScale,
   loadPdf,
   renderPage,
   onResize,
+  getPageAspectRatio,
 } from "../src/js/pdfViewer.js";
 
 function fixturePath(name) {
@@ -66,5 +67,34 @@ describe("loadPdf / renderPage / onResize", () => {
     await onResize();
 
     expect(canvas.width).not.toBe(widthBeforeResize);
+  });
+});
+
+describe("getPageAspectRatio", () => {
+  beforeEach(() => {
+    document.body.innerHTML = `
+      <canvas id="pdf-canvas"></canvas>
+      <canvas id="overlay-canvas"></canvas>
+    `;
+  });
+
+  it("returns a ratio below 1 for a portrait page", async () => {
+    const bytes = readFileSync(fixturePath("portrait.pdf"));
+    await loadPdf(new Uint8Array(bytes));
+    await expect(getPageAspectRatio(1)).resolves.toBeLessThan(1);
+  });
+
+  it("returns a ratio above 1 for a landscape page", async () => {
+    const bytes = readFileSync(fixturePath("landscape.pdf"));
+    await loadPdf(new Uint8Array(bytes));
+    await expect(getPageAspectRatio(1)).resolves.toBeGreaterThan(1);
+  });
+
+  it("throws when called before a PDF is loaded", async () => {
+    vi.resetModules();
+    const freshPdfViewer = await import("../src/js/pdfViewer.js");
+    await expect(freshPdfViewer.getPageAspectRatio(1)).rejects.toThrow(
+      "PDF is not loaded"
+    );
   });
 });

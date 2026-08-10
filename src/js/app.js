@@ -4,6 +4,7 @@ import * as pdfViewer from "./pdfViewer.js";
 import * as pageNavigator from "./pageNavigator.js";
 import * as inputHandler from "./inputHandler.js";
 import * as fileHistory from "./fileHistory.js";
+import * as windowSizer from "./windowSizer.js";
 
 function showError(message) {
   const viewer = document.getElementById("viewer");
@@ -36,6 +37,13 @@ export async function openFile(path) {
     console.error("Failed to parse PDF", error);
     showError("PDFファイルの解析に失敗しました。");
     return false;
+  }
+
+  try {
+    const aspectRatio = await pdfViewer.getPageAspectRatio(1);
+    await windowSizer.fitToAspectRatio(aspectRatio);
+  } catch (error) {
+    console.error("Failed to resize window to fit the PDF", error);
   }
 
   pageNavigator.init(totalPages, (page) => {

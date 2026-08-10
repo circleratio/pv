@@ -24,7 +24,8 @@ pv/
 │       ├── inputHandler.js  # キーボード・マウス・ホイールイベント処理
 │       ├── laserPointer.js  # レーザーポインター描画・フェードアウト管理
 │       ├── fileHistory.js   # ファイル履歴の保持・重複排除・永続化
-│       └── historyMenu.js   # 右クリックで表示する履歴選択メニューのUI
+│       ├── historyMenu.js   # 右クリックで表示する履歴選択メニューのUI
+│       └── windowSizer.js   # PDFのアスペクト比に合わせたウィンドウリサイズ
 ├── tests/              # フロントエンド単体テスト（Vitest）
 │   ├── pdfViewer.test.js
 │   ├── pageNavigator.test.js
@@ -32,6 +33,7 @@ pv/
 │   ├── laserPointer.test.js
 │   ├── fileHistory.test.js
 │   ├── historyMenu.test.js
+│   ├── windowSizer.test.js
 │   └── fixtures/       # テスト用の簡易PDFサンプル（縦長・横長各1点程度）
 ├── package.json
 └── vite.config.js
@@ -57,9 +59,9 @@ pv/
 
 - アプリ起動時の初期化処理を行うエントリポイント。
 - `get_initial_pdf_path` を呼び出し、パスが得られればそのPDFを読み込む。パスが得られない場合はPDFを読み込まず、空白のウィンドウのまま初期化を完了する（ファイル選択ダイアログは自動表示しない）。
-- 各モジュール（`pdfViewer` / `pageNavigator` / `inputHandler` / `laserPointer` / `fileHistory` / `historyMenu`）を初期化・連携させる。`inputHandler.init()` は起動時にPDFを読み込めたかどうかに関わらず必ず実行し、右クリックメニュー（「ファイルを開く」・履歴）を常に利用可能にする。
+- 各モジュール（`pdfViewer` / `pageNavigator` / `inputHandler` / `laserPointer` / `fileHistory` / `historyMenu` / `windowSizer`）を初期化・連携させる。`inputHandler.init()` は起動時にPDFを読み込めたかどうかに関わらず必ず実行し、右クリックメニュー（「ファイルを開く」・履歴）を常に利用可能にする。
 - 起動時に `fileHistory.load()` を呼び出し、保存済み履歴を読み込んでおく。
-- `openFile(path)`: PDFを開く一連の処理（`read_pdf_file` → `pdfViewer.loadPdf` → `pageNavigator.init` → `pdfViewer.renderPage(1)`）を共通関数として提供し、成功時に `fileHistory.add(path)` を呼び出す。起動時（引数指定時）・「ファイルを開く」ダイアログ経由・履歴メニュー経由のいずれのPDFオープンもこの関数を通す。
+- `openFile(path)`: PDFを開く一連の処理（`read_pdf_file` → `pdfViewer.loadPdf` → `pdfViewer.getPageAspectRatio(1)` → `windowSizer.fitToAspectRatio(aspectRatio)` → `pageNavigator.init` → `pdfViewer.renderPage(1)`）を共通関数として提供し、成功時に `fileHistory.add(path)` を呼び出す。起動時（引数指定時）・「ファイルを開く」ダイアログ経由・履歴メニュー経由のいずれのPDFオープンもこの関数を通す。`windowSizer.fitToAspectRatio` が失敗しても`console.error`にログを出力するのみで処理は継続する（ウィンドウリサイズはPDF表示に必須ではないため）。
 - `openFileViaDialog()`: `tauri-plugin-dialog` の `open()` でファイル選択ダイアログを表示し、選択された場合のみ `openFile(path)` を呼び出す。ダイアログがキャンセルされた場合（`open()` が `null` を返す場合）は何もしない。`inputHandler` の右クリックメニューの「ファイルを開く」から呼び出される。
 - エラーハンドリング:
   - 起動時に引数でPDFパスが指定されており、その `openFile(path)` が失敗（`read_pdf_file`・`pdfViewer.loadPdf` のいずれかが失敗）した場合は、`console.error`にログを出力したうえで画面にエラーメッセージを表示し、`inputHandler.init()` を含む以降の初期化処理は行わない（アプリケーションはクラッシュさせない。再度のファイル選択などのリトライ導線は設けない）。
@@ -73,6 +75,7 @@ pv/
 | `loadPdf(binaryData)` | pdf.jsで`Uint8Array`からPDFドキュメントを読み込み、総ページ数を返す |
 | `renderPage(pageNumber)` | 指定ページを取得し、ウィンドウサイズに合わせたアスペクト比維持のスケールを計算してCanvasに描画 |
 | `calculateFitScale(viewport, windowWidth, windowHeight)` | ページのviewportとウィンドウサイズから、アスペクト比を保ちつつウィンドウ内に収まる最大スケールを算出 |
+| `getPageAspectRatio(pageNumber)` | 指定ページ（省略時は1）をscale 1で取得し、幅/高さのアスペクト比を返す。`loadPdf`後にのみ呼び出せる |
 | `onResize()` | ウィンドウリサイズ時に現在ページを再描画 |
 
 ### 2.4 pageNavigator.js
@@ -116,6 +119,15 @@ pv/
 | `show(x, y, entries, { onSelectEntry, onOpenFile })` | 指定座標にポップアップメニューをDOMで表示する。メニューの先頭には常に「ファイルを開く」項目を表示し、クリック時に`hide()`したうえで`onOpenFile()`を呼び出す。続けて履歴一覧を表示する。履歴が0件の場合は「履歴なし」を表示し選択不可とする。履歴項目クリック時は`hide()`したうえで`onSelectEntry(path)`を呼び出す |
 | `hide()` | メニューを非表示にして破棄する。メニュー外のクリックでも呼び出される |
 
+### 2.9 windowSizer.js
+
+| 関数 | 役割 |
+|---|---|
+| `calculateSize(currentWidth, currentHeight, aspectRatio)` | 現在のウィンドウ幅・高さから面積を算出し、その面積をなるべく保ちつつ指定アスペクト比（幅/高さ）となる幅・高さを算出する純粋関数（`height = sqrt(面積 / aspectRatio)`、`width = height * aspectRatio`、四捨五入）。 |
+| `fitToAspectRatio(aspectRatio)` | Tauriの`@tauri-apps/api/window`（`getCurrentWindow`）を用いて、現在のウィンドウが最大化中であれば`unmaximize()`を呼び出したうえで、`innerSize()`と`calculateSize`から算出した新サイズを`setSize()`で適用する非同期関数 |
+
+Tauriの権限設定（`src-tauri/capabilities/default.json`）に、ウィンドウリサイズに必要な `core:window:allow-inner-size` / `core:window:allow-is-maximized` / `core:window:allow-set-size` / `core:window:allow-unmaximize` を追加する。
+
 ### 2.6 laserPointer.js
 
 | 要素 | 役割 |
@@ -154,10 +166,17 @@ openFile(path) の内部:
    pdfViewer.loadPdf(binaryData) → 総ページ数取得
    │
    ▼
+   pdfViewer.getPageAspectRatio(1) → 1ページ目のアスペクト比取得
+   │
+   ▼
+   windowSizer.fitToAspectRatio(aspectRatio)
+   （最大化中なら解除 → 現在の面積を保ってアスペクト比に合わせてリサイズ。失敗してもログのみで継続）
+   │
+   ▼
    pageNavigator.init(totalPages)
    │
    ▼
-   pdfViewer.renderPage(1) … 1ページ目を表示
+   pdfViewer.renderPage(1) … 1ページ目を、リサイズ後のウィンドウに余白なく表示
    │
    ▼
    fileHistory.add(path) → save_history で永続化
@@ -215,6 +234,8 @@ pdfViewer.onResize()
 現在ページを新しいウィンドウサイズに合わせて再計算・再描画
 （レーザーポインターのオーバーレイCanvasもサイズを追従させる）
 ```
+
+`windowSizer.fitToAspectRatio`（3.1参照）による`setSize()`呼び出しもこの`resize`イベントを発生させうるが、`openFile`内で直後に`renderPage(1)`を明示的に呼び出すため、結果として同じページが再描画されるだけで問題は生じない。
 
 ### 3.5 ファイル履歴選択フロー
 
@@ -298,3 +319,7 @@ openFile(path) 内で fileHistory.add(path) が実行され、
 | 20 | ファイル履歴（永続化） | PDFファイルを開いた後アプリを再起動 | 再起動後も履歴が保持されている |
 | 21 | 空白ウィンドウからのオープン | 引数なしで起動し、右クリックの「ファイルを開く」からPDFを選択 | ダイアログでPDFを選択すると1ページ目が表示され、履歴に記録される |
 | 22 | 空白ウィンドウからのキャンセル | 引数なしで起動し、右クリックの「ファイルを開く」からダイアログをキャンセル | 空白ウィンドウのまま変化せず、エラー表示もされない |
+| 23 | PDFオープン時のリサイズ（縦長） | 通常ウィンドウ（横長）の状態で縦長PDFを開く | ウィンドウが縦長PDFのアスペクト比に合わせてリサイズされ、表示に余白がほぼできない |
+| 24 | PDFオープン時のリサイズ（横長） | 通常ウィンドウの状態で横長PDFを開く | ウィンドウが横長PDFのアスペクト比に合わせてリサイズされ、表示に余白がほぼできない |
+| 25 | PDFオープン時のリサイズ（最大化中） | ウィンドウを最大化した状態でPDFを開く | 最大化が解除され、アスペクト比に合わせたウィンドウサイズになる |
+| 26 | PDFオープン時のリサイズ（面積維持） | 任意のウィンドウサイズでPDFを開く | リサイズ後のウィンドウ面積が、リサイズ前とおおむね同じになる |

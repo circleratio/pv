@@ -43,6 +43,20 @@ export async function loadPdf(binaryData) {
 }
 
 /**
+ * Returns the width/height aspect ratio of the given page (at scale 1).
+ * @param {number} [pageNumber]
+ * @returns {Promise<number>}
+ */
+export async function getPageAspectRatio(pageNumber = 1) {
+  if (!pdfDocument) {
+    throw new Error("PDF is not loaded");
+  }
+  const page = await pdfDocument.getPage(pageNumber);
+  const viewport = page.getViewport({ scale: 1 });
+  return viewport.width / viewport.height;
+}
+
+/**
  * Renders the given page number onto #pdf-canvas, fit to the current window size.
  * @param {number} pageNumber
  */
