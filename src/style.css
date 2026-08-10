@@ -64,13 +64,68 @@ body {
   background-color: #444;
 }
 
-.history-menu-fullscreen-item {
+.history-menu-slidelist-item {
   border-bottom: 1px solid #555;
   margin-bottom: 4px;
   padding-bottom: 8px;
 }
 
+.history-menu-item.disabled {
+  color: #666;
+  cursor: default;
+}
+
+.history-menu-item.disabled:hover {
+  background-color: transparent;
+}
+
 .history-menu-empty {
   padding: 6px 12px;
   color: #888;
+}
+
+.slide-list-view {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 24px;
+  background-color: #111;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  align-content: start;
+}
+
+.slide-list-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.slide-list-tile:hover {
+  background-color: #222;
+}
+
+.slide-list-tile.current {
+  border-color: #f80;
+}
+
+.slide-list-page-number {
+  color: #fff;
+  font-family: sans-serif;
+  font-size: 0.85rem;
+}
+
+.slide-list-thumbnail {
+  max-width: 100%;
+  height: auto;
+  background-color: #000;
 }

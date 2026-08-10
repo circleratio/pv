@@ -246,3 +246,58 @@
 - 全モジュールを結合したアプリケーションに対して、spec.md 5章「テスト設計」の37項目（起動、ページ送り、境界、終了、レーザーポインター、リサイズ、フィット表示、ファイル履歴、空白ウィンドウからのオープン、PDFオープン時のウィンドウリサイズ、ドラッグ＆ドロップ、全画面モード、右クリックメニューの画面端クランプ、PDFオープン時の並行描画防御）を手動シナリオとして実施する。
 - 併せて `npm test` / `cargo test` を通しで実行し、これまでの自動テストがすべてgreenであることを確認する。
 - **完了条件**: 自動テストが全てgreen、かつspec.md 5章の37項目すべてが合格する。
+
+## Step 36: pageNavigator.js - `getTotalPages` / `goTo`
+
+- 依存: Step 35
+- 総ページ数を返す `getTotalPages()` と、指定ページに移動する `goTo(pageNumber)`（1〜総ページ数にクランプし、現在ページと異なる場合のみ更新して`onPageChange`を呼ぶ）を実装する。
+- **テスト**（Vitest）: `init`後に`getTotalPages()`が総ページ数を返すこと／`goTo()`で範囲内のページへ移動し`onChange`が呼ばれること／範囲外の値を指定すると1または総ページ数にクランプされること／現在ページと同じ値を指定した場合は`onChange`が呼ばれないこと。
+- **完了条件**: 該当テストgreen。
+
+## Step 37: pdfViewer.js - `renderThumbnail`
+
+- 依存: Step 6
+- 指定ページを、幅が`maxWidth`に収まるスケールで指定Canvasに描画する`renderThumbnail(pageNumber, canvas, maxWidth)`を実装する。`renderPage`の世代カウンタ／キャンセル機構（呼び出しごとに同一の`#pdf-canvas`を奪い合う場合の防御）は、呼び出しごとに独立したCanvasを受け取るため使用しない。
+- **テスト**（Vitest。`tests/fixtures/`の縦長・横長サンプルPDFを使用）: 指定した`maxWidth`に応じてCanvasの`width`/`height`がアスペクト比を保って設定されること／例外なく完了すること。
+- **完了条件**: 該当テストgreen。
+
+## Step 38: slideListView.js
+
+- 依存: Step 37
+- `isActive()` / `show(totalPages, currentPage, { onSelectSlide })` / `hide()` を実装する。`show()`は既存表示を`hide()`したうえで、ページ番号ラベルとサムネイル用`<canvas>`を持つタイルを`totalPages`件生成し（`currentPage`のタイルには`.current`クラスを付与）、各タイルの`dblclick`で`onSelectSlide(pageNumber)`を呼ぶ。タイル追加ごとに`pdfViewer.renderThumbnail()`を並行で呼び出し、失敗時は`console.error`のみで継続する。
+- **テスト**（Vitest。jsdom、`pdfViewer.renderThumbnail`をモック）: `show()`で`totalPages`件のタイルとページ番号が生成されること／各タイルに対し`renderThumbnail`が呼ばれること／`currentPage`に一致するタイルに`current`クラスが付くこと／タイルの`dblclick`で`onSelectSlide(pageNumber)`が呼ばれること／`isActive()`が`show()`後に真、`hide()`後に偽になること／`show()`を再度呼ぶと前回表示が入れ替わること。
+- **完了条件**: 該当テストgreen。
+
+## Step 39: historyMenu.js - スライド一覧表示トグル項目の追加
+
+- 依存: Step 25, Step 38
+- `show(x, y, entries, { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen, onToggleSlideList, isSlideListActive, canShowSlideList })`に対応する。全画面トグル項目の次にスライド一覧表示トグル項目を追加し、`isSlideListActive`に応じて文言を切り替える（真: 「スライド一覧表示を解除」、偽: 「スライド一覧表示にする」）。`canShowSlideList`が偽の場合はクリック不可のグレーアウト表示にしクリックリスナーを付けない。真の場合はクリックで`hide()`したうえで`onToggleSlideList()`を呼ぶ。
+- **テスト**（Vitest。jsdom）: `isSlideListActive`の真偽に応じた文言が表示されること／クリックで`onToggleSlideList`が呼ばれメニューが閉じること／`canShowSlideList: false`のとき項目が`disabled`表示になりクリックしても何も起きないこと。
+- **完了条件**: 該当テストgreen。
+
+## Step 40: inputHandler.js - スライド一覧表示モードの統合
+
+- 依存: Step 36, Step 38, Step 39
+- `handleKeydown`のEscapeハンドリングを、`slideListView.isActive()`を最優先で確認し真であれば`slideListView.hide()`を呼ぶよう変更する（偽であれば従来の全画面判定に進む）。Escape以外のページ送りキー、および`handleWheel`は、`slideListView.isActive()`が真の間は何もしないよう変更する。`handleContextmenu`で`pageNavigator.getTotalPages() > 0`（`canShowSlideList`）と`slideListView.isActive()`（`isSlideListActive`）を算出し、`historyMenu.show()`に`onToggleSlideList`と合わせて渡す。新規関数`toggleSlideListView()`を実装する（`slideListView.isActive()`なら`hide()`、そうでなければ`pageNavigator`の総ページ数・現在ページで`slideListView.show()`し、`onSelectSlide`で`pageNavigator.goTo(page)`後に`slideListView.hide()`する）。
+- **テスト**（Vitest。jsdomでのイベントディスパッチ、`pageNavigator`/`slideListView`をモック）: スライド一覧表示中は矢印キー・ホイールで`pageNavigator.next/prev`が呼ばれないこと／スライド一覧表示中のEscapeで`slideListView.hide()`が呼ばれ`closeWindow`・`fullscreen.exit`が呼ばれないこと／`contextmenu`で`historyMenu.show`に`onToggleSlideList`・`isSlideListActive`・`canShowSlideList`が正しく渡ること／`onToggleSlideList`実行時、非アクティブなら`slideListView.show`が`pageNavigator`の総ページ数・現在ページで呼ばれ、アクティブなら`slideListView.hide`が呼ばれること／`onSelectSlide`経由で`pageNavigator.goTo`と`slideListView.hide`が呼ばれること。
+- **完了条件**: 該当テストgreen。
+
+## Step 41: スライド一覧表示モード統合の完了
+
+- 依存: Step 40
+- Step 40までの実装を土台に、spec.md 5章のテストケース38〜45を手動シナリオとして実施する。併せて`npm test`を通しで実行し、すべての自動テストがgreenであることを確認する。
+- **完了条件**: 自動テストが全てgreen、かつspec.md 5章のケース38〜45すべてが合格する。
+
+## Step 42: slideListView.js / inputHandler.js - シングルクリックでのカレントスライド変更
+
+- 依存: Step 41
+- `slideListView.show()`のコールバックに`onHighlightSlide`を追加する。各タイルの`click`（シングルクリック）で、`.current`クラスを現在ハイライト中のタイルからクリックされたタイルへ付け替えたうえで`onHighlightSlide(pageNumber)`を呼ぶ（`hide()`は呼ばない）。
+- `inputHandler.js`の`toggleSlideListView()`を、`slideListView.show()`に`onHighlightSlide: (page) => pageNavigator.goTo(page)`を追加で渡すよう変更する（`onSelectSlide`は既存どおり`pageNavigator.goTo(page)`に加えて`slideListView.hide()`を呼ぶ）。
+- **テスト**（Vitest）: `slideListView.test.js` — タイルの`click`で`onHighlightSlide(pageNumber)`が呼ばれること／`.current`クラスがクリックしたタイルへ移動し、以前のタイルからは外れること／`click`だけでは`isActive()`が真のまま維持されること。`inputHandler.test.js` — `toggleSlideListView`実行時に`slideListView.show`へ`onHighlightSlide`が渡ること／`onHighlightSlide(page)`実行で`pageNavigator.goTo(page)`が呼ばれ`slideListView.hide()`は呼ばれないこと。
+- **完了条件**: 該当テストgreen。
+
+## Step 43: シングルクリック対応の完了
+
+- 依存: Step 42
+- Step 42までの実装を土台に、spec.md 5章のテストケース46〜48を手動シナリオとして実施する。併せて`npm test`を通しで実行し、すべての自動テストがgreenであることを確認する。
+- **完了条件**: 自動テストが全てgreen、かつspec.md 5章のケース46〜48すべてが合格する。

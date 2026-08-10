@@ -32,17 +32,26 @@ function removeMenu() {
 
 /**
  * Shows a popup menu at the given viewport position: an always-present
- * "open file" item, a fullscreen toggle item, and the file history.
+ * "open file" item, a fullscreen toggle item, a slide list view toggle item,
+ * and the file history.
  * @param {number} x
  * @param {number} y
  * @param {string[]} entries file paths, newest first
- * @param {{ onSelectEntry: (path: string) => void, onOpenFile: () => void, onToggleFullscreen: () => void, isFullscreen: boolean }} callbacks
+ * @param {{ onSelectEntry: (path: string) => void, onOpenFile: () => void, onToggleFullscreen: () => void, isFullscreen: boolean, onToggleSlideList: () => void, isSlideListActive: boolean, canShowSlideList: boolean }} callbacks
  */
 export function show(
   x,
   y,
   entries,
-  { onSelectEntry, onOpenFile, onToggleFullscreen, isFullscreen }
+  {
+    onSelectEntry,
+    onOpenFile,
+    onToggleFullscreen,
+    isFullscreen,
+    onToggleSlideList,
+    isSlideListActive,
+    canShowSlideList,
+  }
 ) {
   hide();
 
@@ -69,6 +78,21 @@ export function show(
     onToggleFullscreen();
   });
   menu.appendChild(fullscreenItem);
+
+  const slideListItem = document.createElement("li");
+  slideListItem.className = "history-menu-item history-menu-slidelist-item";
+  slideListItem.textContent = isSlideListActive
+    ? "スライド一覧表示を解除"
+    : "スライド一覧表示にする";
+  if (canShowSlideList) {
+    slideListItem.addEventListener("click", () => {
+      hide();
+      onToggleSlideList();
+    });
+  } else {
+    slideListItem.classList.add("disabled");
+  }
+  menu.appendChild(slideListItem);
 
   if (entries.length === 0) {
     const empty = document.createElement("li");

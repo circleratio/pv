@@ -3,6 +3,7 @@ import * as laserPointer from "./laserPointer.js";
 import * as fileHistory from "./fileHistory.js";
 import * as historyMenu from "./historyMenu.js";
 import * as fullscreen from "./fullscreen.js";
+import * as slideListView from "./slideListView.js";
 
 const NEXT_KEYS = ["ArrowRight", "ArrowDown", " "];
 const PREV_KEYS = ["ArrowLeft", "ArrowUp", "Backspace"];
@@ -20,16 +21,25 @@ function defaultCloseWindow() {
 }
 
 function handleKeydown(event) {
+  if (event.key === "Escape") {
+    handleEscape();
+    return;
+  }
+  if (slideListView.isActive()) return; // page-turning keys are disabled while the slide list is open
+
   if (NEXT_KEYS.includes(event.key)) {
     pageNavigator.next();
   } else if (PREV_KEYS.includes(event.key)) {
     pageNavigator.prev();
-  } else if (event.key === "Escape") {
-    handleEscape();
   }
 }
 
 async function handleEscape() {
+  if (slideListView.isActive()) {
+    slideListView.hide();
+    return;
+  }
+
   let inFullscreen = false;
   try {
     inFullscreen = await fullscreen.isFullscreen();
@@ -49,11 +59,29 @@ async function handleEscape() {
 }
 
 function handleWheel(event) {
+  if (slideListView.isActive()) return; // page-turning is disabled while the slide list is open
+
   if (event.deltaY > 0) {
     pageNavigator.next();
   } else if (event.deltaY < 0) {
     pageNavigator.prev();
   }
+}
+
+/** Toggles the slide list view on/off, wiring up slide selection to jump the current page. */
+function toggleSlideListView() {
+  if (slideListView.isActive()) {
+    slideListView.hide();
+    return;
+  }
+
+  slideListView.show(pageNavigator.getTotalPages(), pageNavigator.getCurrentPage(), {
+    onHighlightSlide: (page) => pageNavigator.goTo(page),
+    onSelectSlide: (page) => {
+      pageNavigator.goTo(page);
+      slideListView.hide();
+    },
+  });
 }
 
 /**
@@ -88,6 +116,8 @@ function handleContextmenu(event) {
   event.preventDefault();
   const { clientX, clientY } = event;
   const entries = fileHistory.getAll();
+  const canShowSlideList = pageNavigator.getTotalPages() > 0;
+  const isSlideListActive = slideListView.isActive();
 
   fullscreen
     .isFullscreen()
@@ -105,6 +135,9 @@ function handleContextmenu(event) {
             .catch((error) => console.error("Failed to toggle fullscreen", error));
         },
         isFullscreen: inFullscreen,
+        onToggleSlideList: () => toggleSlideListView(),
+        isSlideListActive,
+        canShowSlideList,
       });
     });
 }

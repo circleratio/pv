@@ -5,6 +5,7 @@ import {
   calculateFitScale,
   loadPdf,
   renderPage,
+  renderThumbnail,
   onResize,
   getPageAspectRatio,
 } from "../src/js/pdfViewer.js";
@@ -81,6 +82,36 @@ describe("loadPdf / renderPage / onResize", () => {
 
     await expect(first).resolves.toBeUndefined();
     await expect(second).resolves.toBeUndefined();
+  });
+});
+
+describe("renderThumbnail", () => {
+  beforeEach(() => {
+    document.body.innerHTML = `
+      <canvas id="pdf-canvas"></canvas>
+      <canvas id="overlay-canvas"></canvas>
+    `;
+  });
+
+  it("scales the thumbnail canvas to fit the given maxWidth, preserving aspect ratio", async () => {
+    const bytes = readFileSync(fixturePath("landscape.pdf"));
+    await loadPdf(new Uint8Array(bytes));
+
+    const canvas = document.createElement("canvas");
+    await renderThumbnail(1, canvas, 200);
+
+    expect(canvas.width).toBe(200);
+    expect(canvas.height).toBeGreaterThan(0);
+    expect(canvas.height).toBeLessThan(canvas.width);
+  });
+
+  it("renders onto an independent canvas without throwing", async () => {
+    const bytes = readFileSync(fixturePath("portrait.pdf"));
+    await loadPdf(new Uint8Array(bytes));
+
+    const canvas = document.createElement("canvas");
+    await expect(renderThumbnail(2, canvas, 150)).resolves.not.toThrow();
+    expect(canvas.width).toBe(150);
   });
 });
 

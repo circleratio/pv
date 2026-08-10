@@ -43,4 +43,38 @@ describe("pageNavigator", () => {
     pageNavigator.next();
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("reports the total page count set by init()", () => {
+    pageNavigator.init(5);
+    expect(pageNavigator.getTotalPages()).toBe(5);
+  });
+
+  it("goTo() jumps directly to the given page and notifies the change callback", () => {
+    const onChange = vi.fn();
+    pageNavigator.init(5, onChange);
+
+    pageNavigator.goTo(4);
+
+    expect(pageNavigator.getCurrentPage()).toBe(4);
+    expect(onChange).toHaveBeenCalledWith(4);
+  });
+
+  it("goTo() clamps out-of-range page numbers to [1, totalPages]", () => {
+    pageNavigator.init(5);
+
+    pageNavigator.goTo(99);
+    expect(pageNavigator.getCurrentPage()).toBe(5);
+
+    pageNavigator.goTo(-3);
+    expect(pageNavigator.getCurrentPage()).toBe(1);
+  });
+
+  it("goTo() does not notify the change callback when the page does not change", () => {
+    const onChange = vi.fn();
+    pageNavigator.init(5, onChange);
+
+    pageNavigator.goTo(1);
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

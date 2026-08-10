@@ -29,3 +29,20 @@ export function prev() {
 export function getCurrentPage() {
   return currentPage;
 }
+
+export function getTotalPages() {
+  return totalPages;
+}
+
+/**
+ * Jumps directly to `pageNumber`, clamped to [1, totalPages]. Used by the
+ * slide list view's double-click selection.
+ * @param {number} pageNumber
+ */
+export function goTo(pageNumber) {
+  const clamped = Math.min(Math.max(pageNumber, 1), totalPages);
+  if (clamped !== currentPage) {
+    currentPage = clamped;
+    onPageChange?.(currentPage);
+  }
+}

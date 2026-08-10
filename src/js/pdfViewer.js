@@ -122,6 +122,33 @@ export async function renderPage(pageNumber) {
 }
 
 /**
+ * Renders the given page onto `canvas`, scaled to fit within `maxWidth`.
+ * Used by the slide list view's thumbnails. Unlike renderPage(), this does
+ * not need the cancellation/generation guards: each call targets a distinct
+ * canvas supplied by the caller, so concurrent calls never race on the same
+ * canvas.
+ * @param {number} pageNumber
+ * @param {HTMLCanvasElement} canvas
+ * @param {number} maxWidth
+ */
+export async function renderThumbnail(pageNumber, canvas, maxWidth) {
+  if (!pdfDocument) {
+    throw new Error("PDF is not loaded");
+  }
+
+  const page = await pdfDocument.getPage(pageNumber);
+  const baseViewport = page.getViewport({ scale: 1 });
+  const scale = maxWidth / baseViewport.width;
+  const viewport = page.getViewport({ scale });
+
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+
+  const context = canvas.getContext("2d");
+  await page.render({ canvasContext: context, viewport }).promise;
+}
+
+/**
  * Re-renders the currently displayed page for the new window size.
  */
 export function onResize() {

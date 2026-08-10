@@ -3,7 +3,7 @@ import * as historyMenu from "../src/js/historyMenu.js";
 
 function historyItems() {
   return document.querySelectorAll(
-    ".history-menu-item:not(.history-menu-open-item):not(.history-menu-fullscreen-item)"
+    ".history-menu-item:not(.history-menu-open-item):not(.history-menu-fullscreen-item):not(.history-menu-slidelist-item)"
   );
 }
 
@@ -15,12 +15,19 @@ function fullscreenItem() {
   return document.querySelector(".history-menu-fullscreen-item");
 }
 
+function slideListItem() {
+  return document.querySelector(".history-menu-slidelist-item");
+}
+
 function callbacks(overrides = {}) {
   return {
     onSelectEntry: vi.fn(),
     onOpenFile: vi.fn(),
     onToggleFullscreen: vi.fn(),
     isFullscreen: false,
+    onToggleSlideList: vi.fn(),
+    isSlideListActive: false,
+    canShowSlideList: true,
     ...overrides,
   };
 }
@@ -90,6 +97,41 @@ describe("historyMenu", () => {
 
     expect(cb.onToggleFullscreen).toHaveBeenCalledTimes(1);
     expect(document.getElementById("history-menu")).toBeNull();
+  });
+
+  it("shows 'show slide list' wording when the slide list view is not active", () => {
+    historyMenu.show(0, 0, [], callbacks({ isSlideListActive: false }));
+
+    expect(slideListItem().textContent).toBe("スライド一覧表示にする");
+  });
+
+  it("shows 'hide slide list' wording when the slide list view is active", () => {
+    historyMenu.show(0, 0, [], callbacks({ isSlideListActive: true }));
+
+    expect(slideListItem().textContent).toBe("スライド一覧表示を解除");
+  });
+
+  it("calls onToggleSlideList and hides the menu when the slide list item is clicked", () => {
+    const cb = callbacks();
+    historyMenu.show(0, 0, ["a.pdf"], cb);
+
+    slideListItem().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(cb.onToggleSlideList).toHaveBeenCalledTimes(1);
+    expect(document.getElementById("history-menu")).toBeNull();
+  });
+
+  it("disables the slide list item when no PDF is loaded", () => {
+    const cb = callbacks({ canShowSlideList: false });
+    historyMenu.show(0, 0, [], cb);
+
+    const item = slideListItem();
+    expect(item.classList.contains("disabled")).toBe(true);
+
+    item.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(cb.onToggleSlideList).not.toHaveBeenCalled();
+    expect(document.getElementById("history-menu")).not.toBeNull();
   });
 
   it("renders each history entry as a clickable item", () => {
